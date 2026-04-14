@@ -1,0 +1,47 @@
+"""Shared Pydantic data models for the JungleCoach backend."""
+
+from typing import Literal
+from pydantic import BaseModel, Field
+
+
+class LaneState(BaseModel):
+    """Input data for a single lane, used by the scorer."""
+
+    ally_champion: str
+    enemy_champion: str
+    matchup_winrate: float = Field(ge=0.0, le=1.0)
+    ally_phase_strength: float = Field(ge=0.0, le=1.0)
+    cs_diff: int
+    ally_kill_pressure: bool
+
+
+class GameState(BaseModel):
+    """Full game state passed to the analysis engine."""
+
+    game_minute: int = Field(ge=0)
+    game_phase: Literal["early", "mid", "late"]
+    patch: str
+    top: LaneState
+    mid: LaneState
+    bot: LaneState
+
+
+class LaneSuggestion(BaseModel):
+    """Output for a single lane — served via the API."""
+
+    ally_champion: str
+    enemy_champion: str
+    matchup_winrate: float
+    priority: Literal["high", "medium", "low"]
+    reason: str
+    score: float
+
+
+class AnalysisResult(BaseModel):
+    """Full response payload for GET /analysis."""
+
+    game_detected: bool
+    game_minute: int | None = None
+    patch: str | None = None
+    analysed_at: str | None = None
+    lanes: dict[str, LaneSuggestion] | None = None
