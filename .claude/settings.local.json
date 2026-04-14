@@ -6,7 +6,17 @@
       "Bash(mv junglecoach/backend .)",
       "Bash(mv junglecoach/overlay .)",
       "Bash(mv junglecoach/web .)",
-      "Bash(mv junglecoach/scripts .)"
+      "Bash(mv junglecoach/scripts .)",
+      "Bash(git checkout:*)",
+      "Bash(python -m venv venv)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/test_champion_parser.py -v)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python -m pytest tests/test_ocr.py -v)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(git add:*)"
     ]
   }
 }
