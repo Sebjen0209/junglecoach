@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.db
+
+# Node
+node_modules/
+.next/
+dist/
+out/
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Electron build artifacts
+overlay/dist/
+overlay/build/
+
+# Secrets
+*.pem
+*.key
