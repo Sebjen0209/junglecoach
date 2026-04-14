@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/holms/Documents/Projects/junglecoach -not -path */.git* -type f -o -not -path */.git* -type d)",
+      "Bash(mv junglecoach/.github .)",
+      "Bash(mv junglecoach/backend .)",
+      "Bash(mv junglecoach/overlay .)",
+      "Bash(mv junglecoach/web .)",
+      "Bash(mv junglecoach/scripts .)"
+    ]
+  }
+}
