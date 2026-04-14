@@ -20,7 +20,12 @@ Read `CLAUDE.md` first for the full project context.
 - [ ] Build early/mid/late power spike weighting
 
 ### Done
-
+- [x] Screen capture loop with mss
+- [x] TAB scoreboard OCR with pytesseract
+- [x] Champion name parser
+- [x] Role detection from scoreboard layout
+- [x] Local SQLite matchup data cache
+- [x] Unit tests for champion parser
 
 ---
 

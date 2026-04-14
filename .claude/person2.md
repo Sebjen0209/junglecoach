@@ -20,7 +20,13 @@ Read `CLAUDE.md` first for the full project context.
 - [ ] Test on 1080p, 1440p, and ultrawide resolutions
 
 ### Done
-
+- [x] Domain purchased and hosting configured
+- [x] Supabase project created (Postgres + Auth)
+- [x] User registration and login flows
+- [x] Landing page with waitlist
+- [x] Transactional email via Resend
+- [x] Stripe account in test mode
+- [x] User dashboard shell
 
 ---
 
