@@ -74,4 +74,31 @@ Format:
 
 ---
 
+## 2026-04-14 — Matchup data distributed via CDN, not scraped by clients
+
+**Decision**: `scraper.py` is an internal dev tool only. Developers run it after each patch and upload a pre-built `matchups.db` (or JSON export) to a CDN/Railway endpoint. Clients download fresh data on startup if their local patch version is outdated.
+
+**Why**: Having every client independently scrape U.GG would (a) get our users IP-banned, (b) be slow as a first-run experience, and (c) produce inconsistent data. Centralising the scrape gives us one controlled, validated dataset per patch.
+
+**Alternatives considered**:
+- Client-side scrape on install (fragile, ToS risk for users)
+- Bundle `matchups.db` in every installer update (forces a full re-download every 2 weeks just for data)
+- Use Riot's official API for matchup stats (doesn't expose aggregated win-rate data)
+
+**Impact**: Person 1 — needs to build a `/data/latest` endpoint on Railway that returns the current patch version + a signed CDN URL for the `matchups.db` download. Client backend checks this on startup and re-downloads if stale. Person 2 — Railway service needs a new route.
+
+---
+
+## 2026-04-14 — AI calls are per-user, billed to the product (not the user)
+
+**Decision**: The `ANTHROPIC_API_KEY` lives in the backend that runs on the user's machine. In production this key will be tied to our Anthropic account, not the user's. The cost is borne by the product and factored into subscription pricing.
+
+**Why**: Requiring users to supply their own API key creates friction and makes the free tier impossible. Controlling the key also lets us rate-limit free users (scorer-only, no AI) vs premium users (full AI reasons).
+
+**Alternatives considered**: User-supplied API key (too much friction), running the AI call server-side on Railway (adds latency, more complex, but worth revisiting if key security becomes a concern).
+
+**Impact**: Person 1 — the API key must NOT be hard-coded or committed. It will be injected at install time (TBD — possibly fetched from Railway on first auth). For now, dev uses a personal key in `.env`. Person 2 — free vs premium feature gating needs to suppress the AI call for free users (return scorer-only result).
+
+---
+
 _Add new decisions below this line_
