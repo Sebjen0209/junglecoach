@@ -33,8 +33,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const plan = planFromPriceId(priceId);
 
   const periodEnd =
-    (subscription as unknown as { current_period_end?: number }).current_period_end ??
-    subscription.items.data[0]?.current_period_end;
+    (subscription as unknown as { current_period_end?: number }).current_period_end;
 
   await supabase.from("subscriptions").upsert(
     {
@@ -57,8 +56,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   // current_period_end moved off the top-level object in newer Stripe API versions
   const periodEnd =
-    (subscription as unknown as { current_period_end?: number }).current_period_end ??
-    subscription.items.data[0]?.current_period_end;
+    (subscription as unknown as { current_period_end?: number }).current_period_end;
 
   await supabase
     .from("subscriptions")
