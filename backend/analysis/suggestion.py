@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 
 from analysis.ai_client import AIClient
 from analysis.scorer import score_lane, score_to_priority
-from capture.champion_parser import ScoreboardOCRResult, parse_scoreboard_row
-from capture.ocr import ScoreboardOCRResult  # re-export for type clarity
+from capture.champion_parser import parse_scoreboard_row
+from capture.ocr import ScoreboardOCRResult
 from config import settings
 from data.db import get_matchup_winrate, get_phase_strength
 from models import AnalysisResult, GameState, LaneSuggestion, LaneState
