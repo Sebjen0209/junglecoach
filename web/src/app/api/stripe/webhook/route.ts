@@ -21,7 +21,7 @@ function planFromPriceId(priceId: string): string {
   return map[priceId] ?? "premium";
 }
 
-async function handleCheckoutComplete(session: Stripe.CheckoutSession) {
+async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const supabase = createServiceClient();
   const userId = session.metadata?.user_id;
   if (!userId || !session.customer || !session.subscription) return;
@@ -33,8 +33,7 @@ async function handleCheckoutComplete(session: Stripe.CheckoutSession) {
   const plan = planFromPriceId(priceId);
 
   const periodEnd =
-    (subscription as unknown as { current_period_end?: number }).current_period_end ??
-    subscription.items.data[0]?.current_period_end;
+    (subscription as unknown as { current_period_end?: number }).current_period_end;
 
   await supabase.from("subscriptions").upsert(
     {
@@ -57,8 +56,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   // current_period_end moved off the top-level object in newer Stripe API versions
   const periodEnd =
-    (subscription as unknown as { current_period_end?: number }).current_period_end ??
-    subscription.items.data[0]?.current_period_end;
+    (subscription as unknown as { current_period_end?: number }).current_period_end;
 
   await supabase
     .from("subscriptions")
@@ -124,7 +122,7 @@ export async function POST(request: Request) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutComplete(event.data.object as Stripe.CheckoutSession);
+        await handleCheckoutComplete(event.data.object as Stripe.Checkout.Session);
         break;
 
       case "customer.subscription.updated":

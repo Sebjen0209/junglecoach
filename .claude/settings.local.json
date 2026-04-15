@@ -16,7 +16,10 @@
       "Bash(git push:*)",
       "Bash(python -m pytest tests/test_ocr.py -v)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(node -e \"require\\('./web/node_modules/framer-motion/package.json'\\)\")",
+      "Bash(npm install *)"
     ]
   }
 }
