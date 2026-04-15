@@ -21,7 +21,7 @@ function planFromPriceId(priceId: string): string {
   return map[priceId] ?? "premium";
 }
 
-async function handleCheckoutComplete(session: Stripe.CheckoutSession) {
+async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const supabase = createServiceClient();
   const userId = session.metadata?.user_id;
   if (!userId || !session.customer || !session.subscription) return;
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutComplete(event.data.object as Stripe.CheckoutSession);
+        await handleCheckoutComplete(event.data.object as Stripe.Checkout.Session);
         break;
 
       case "customer.subscription.updated":
