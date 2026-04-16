@@ -1,28 +1,39 @@
-"""Assembles the final AnalysisResult from OCR output + DB data + AI reasons.
+"""Assembles the final AnalysisResult from Live Client data + DB + AI.
 
 This is the orchestration layer that wires together:
-  1. OCR output (champion names, roles)
-  2. DB lookups (matchup win rates, power spike ratings)
-  3. Scorer (numeric scores + priority labels)
-  4. AI client (natural language reasons)
-  5. Final packaging into AnalysisResult (served by server.py)
+  1. GameSnapshot      — champion names, CS diffs, kill pressure (Riot local API)
+  2. PlayerProfiles    — mastery + rank per player (Riot remote API, fetched once)
+  3. DB lookups        — matchup win rates, power spike ratings
+  4. Experience delta  — adjusts win rates based on mastery/autofill signals
+  5. Scorer            — numeric scores + priority labels
+  6. AI client         — natural language reasons
+  7. AnalysisResult    — final payload served via GET /analysis
 """
 
 import logging
 from datetime import datetime, timezone
 
 from analysis.ai_client import AIClient
+from analysis.experience import experience_delta
+from analysis.game_phase import game_time_to_phase
 from analysis.scorer import score_lane, score_to_priority
-from capture.champion_parser import parse_scoreboard_row
-from capture.ocr import ScoreboardOCRResult
+from capture.live_client import GameSnapshot, PlayerSnapshot
 from config import settings
 from data.db import get_matchup_winrate, get_phase_strength
-from models import AnalysisResult, GameState, LaneSuggestion, LaneState
+from models import AnalysisResult, GameState, LaneSuggestion, LaneState, PlayerProfile
 
 logger = logging.getLogger(__name__)
 
-# Lane roles we care about for gank suggestions (jungle and support are not ganked)
+# Gank suggestions are only meaningful in standard 5v5 Summoner's Rift games.
+# PRACTICETOOL is included so the pipeline can be tested without a live match.
+_SUPPORTED_GAME_MODES = {"CLASSIC", "PRACTICETOOL"}
+
+# The three lanes the jungler can gank (jungle and support are excluded).
 _GANK_LANES = ("top", "mid", "bot")
+
+# Win rate is clamped after applying experience delta to avoid absurd values.
+_MIN_WINRATE: float = 0.30
+_MAX_WINRATE: float = 0.70
 
 
 def _build_lane_state(
@@ -32,14 +43,16 @@ def _build_lane_state(
     phase: str,
     cs_diff: int = 0,
     ally_kill_pressure: bool = False,
+    exp_delta: float = 0.0,
 ) -> LaneState:
-    """Build a LaneState by looking up win rate and phase strength from DB."""
-    winrate = get_matchup_winrate(ally, enemy, role) or 0.50
+    """Build a LaneState by looking up win rate and phase strength from the DB."""
+    raw_winrate = get_matchup_winrate(ally, enemy, role) or 0.50
+    adjusted_winrate = max(_MIN_WINRATE, min(_MAX_WINRATE, raw_winrate + exp_delta))
     phase_strength = get_phase_strength(ally, phase)
     return LaneState(
         ally_champion=ally,
         enemy_champion=enemy,
-        matchup_winrate=winrate,
+        matchup_winrate=adjusted_winrate,
         ally_phase_strength=phase_strength,
         cs_diff=cs_diff,
         ally_kill_pressure=ally_kill_pressure,
@@ -53,35 +66,38 @@ def build_game_state(
     game_minute: int,
     cs_diffs: dict[str, int] | None = None,
     kill_pressure: dict[str, bool] | None = None,
+    exp_deltas: dict[str, float] | None = None,
 ) -> GameState:
-    """Construct a GameState from parsed OCR data and DB lookups.
+    """Construct a GameState from role maps, DB lookups, and experience data.
 
     Args:
         ally_roles:    {role: champion_name} for the ally team
         enemy_roles:   {role: champion_name} for the enemy team
-        phase:         'early'|'mid'|'late'
+        phase:         'early' | 'mid' | 'late'
         game_minute:   current game minute
-        cs_diffs:      optional {role: int} CS differences (positive = ally ahead)
-        kill_pressure: optional {role: bool} whether ally has kill pressure
+        cs_diffs:      {role: int} CS differences (positive = ally ahead)
+        kill_pressure: {role: bool} whether ally has kill pressure
+        exp_deltas:    {role: float} experience win-rate adjustments per lane
 
     Returns:
         A fully populated GameState ready for scoring and AI analysis.
     """
     cs_diffs = cs_diffs or {}
     kill_pressure = kill_pressure or {}
+    exp_deltas = exp_deltas or {}
 
-    lane_states = {}
-    for role in ("top", "mid", "bot"):
-        ally = ally_roles.get(role, "Unknown")
-        enemy = enemy_roles.get(role, "Unknown")
-        lane_states[role] = _build_lane_state(
-            ally=ally,
-            enemy=enemy,
+    lane_states = {
+        role: _build_lane_state(
+            ally=ally_roles.get(role, "Unknown"),
+            enemy=enemy_roles.get(role, "Unknown"),
             role=role,
             phase=phase,
             cs_diff=cs_diffs.get(role, 0),
             ally_kill_pressure=kill_pressure.get(role, False),
+            exp_delta=exp_deltas.get(role, 0.0),
         )
+        for role in _GANK_LANES
+    }
 
     return GameState(
         game_minute=game_minute,
@@ -94,35 +110,43 @@ def build_game_state(
 
 
 def analyse(
-    ocr_result: ScoreboardOCRResult,
-    phase: str,
-    game_minute: int,
+    snapshot: GameSnapshot,
     ai_client: AIClient,
+    player_profiles: dict[str, PlayerProfile] | None = None,
 ) -> AnalysisResult:
-    """Full analysis pipeline: OCR → DB → scorer → AI → AnalysisResult.
+    """Full analysis pipeline: snapshot → experience → DB → scorer → AI → result.
 
     Args:
-        ocr_result:  Raw OCR output from capture/ocr.py
-        phase:       Game phase string from analysis/game_phase.py
-        game_minute: Game minute from game_phase.py
-        ai_client:   Shared AIClient instance (handles caching)
+        snapshot:        GameSnapshot from capture/live_client.py
+        ai_client:       Shared AIClient instance (handles API caching)
+        player_profiles: {summoner_name: PlayerProfile} fetched at game start.
+                         None if Riot API is not configured — analysis still
+                         runs without experience adjustments.
 
     Returns:
         AnalysisResult ready to be serialised and served via GET /analysis.
     """
-    # Parse OCR names into role maps
-    try:
-        ally_roles = parse_scoreboard_row(ocr_result.ally_raw)
-        enemy_roles = parse_scoreboard_row(ocr_result.enemy_raw)
-    except ValueError as exc:
-        logger.error("Champion parsing failed: %s", exc)
-        return AnalysisResult(game_detected=True)
+    if snapshot.game_mode not in _SUPPORTED_GAME_MODES:
+        logger.info(
+            "Skipping analysis — game mode %r is not supported (only CLASSIC)",
+            snapshot.game_mode,
+        )
+        phase, game_minute = game_time_to_phase(snapshot.game_time_seconds)
+        return AnalysisResult(game_detected=True, game_minute=game_minute)
+
+    phase, game_minute = game_time_to_phase(snapshot.game_time_seconds)
+
+    # Map profiles from summoner_name → role for experience delta calculation.
+    exp_deltas = _compute_experience_deltas(snapshot, player_profiles or {})
 
     game_state = build_game_state(
-        ally_roles=ally_roles,
-        enemy_roles=enemy_roles,
+        ally_roles=snapshot.ally_roles(),
+        enemy_roles=snapshot.enemy_roles(),
         phase=phase,
         game_minute=game_minute,
+        cs_diffs=snapshot.cs_diffs(),
+        kill_pressure=snapshot.kill_pressure(),
+        exp_deltas=exp_deltas,
     )
 
     # Score all lanes
@@ -133,7 +157,7 @@ def analyse(
         priority = score_to_priority(score)
         lane_scores[lane_name] = (score, priority)
 
-    # Get AI reasons (cached if state unchanged)
+    # Get AI reasons (cached by ai_client if state is unchanged)
     try:
         reasons = ai_client.get_reasons(game_state)
     except Exception as exc:
@@ -143,7 +167,7 @@ def analyse(
     # Assemble final result
     lanes: dict[str, LaneSuggestion] = {}
     for lane_name in _GANK_LANES:
-        lane: LaneState = getattr(game_state, lane_name)
+        lane = getattr(game_state, lane_name)
         score, priority = lane_scores[lane_name]
         lanes[lane_name] = LaneSuggestion(
             ally_champion=lane.ally_champion,
@@ -163,6 +187,27 @@ def analyse(
     )
 
 
+def _compute_experience_deltas(
+    snapshot: GameSnapshot,
+    player_profiles: dict[str, PlayerProfile],
+) -> dict[str, float]:
+    """Compute per-lane experience win-rate delta using fetched player profiles."""
+    ally_by_role: dict[str, PlayerProfile] = {
+        p.position: player_profiles[p.summoner_name]
+        for p in snapshot.ally_players
+        if p.summoner_name in player_profiles
+    }
+    enemy_by_role: dict[str, PlayerProfile] = {
+        p.position: player_profiles[p.summoner_name]
+        for p in snapshot.enemy_players
+        if p.summoner_name in player_profiles
+    }
+    return {
+        role: experience_delta(ally_by_role.get(role), enemy_by_role.get(role))
+        for role in _GANK_LANES
+    }
+
+
 def _fallback_reasons(
     game_state: GameState,
     lane_scores: dict[str, tuple[float, str]],
@@ -171,7 +216,7 @@ def _fallback_reasons(
     reasons: dict[str, str] = {}
     for lane_name in _GANK_LANES:
         lane: LaneState = getattr(game_state, lane_name)
-        score, priority = lane_scores[lane_name]
+        _, priority = lane_scores[lane_name]
         winrate_pct = int(lane.matchup_winrate * 100)
         reasons[lane_name] = (
             f"{lane.ally_champion} has a {winrate_pct}% win rate vs "

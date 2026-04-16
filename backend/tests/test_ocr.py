@@ -1,7 +1,7 @@
 """Tests for capture/ocr.py.
 
-pytesseract is mocked throughout — these tests validate the pre-processing
-pipeline, splitting logic, and text-cleaning, not Tesseract itself.
+winocr is mocked throughout — these tests validate the pre-processing pipeline,
+splitting logic, and text-cleaning, not the OCR engine itself.
 """
 
 from unittest.mock import MagicMock, patch
@@ -24,6 +24,23 @@ from capture.ocr import (
 def _blank_image(width: int = 200, height: int = 100, colour: int = 0) -> Image.Image:
     """Create a solid-colour grayscale test image."""
     return Image.new("RGB", (width, height), (colour, colour, colour))
+
+
+class _MockOcrLine:
+    """Minimal stand-in for a winocr OcrLine object."""
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class _MockOcrResult:
+    """Minimal stand-in for a winocr OcrResult object."""
+    def __init__(self, text: str) -> None:
+        self.lines = [_MockOcrLine(text)]
+
+
+def _make_winocr_side_effect(ally: list[str], enemy: list[str]):
+    """Return a side_effect list: first 5 calls = ally bands, next 5 = enemy bands."""
+    return [_MockOcrResult(f"{name}\n") for name in ally + enemy]
 
 
 # ---------------------------------------------------------------------------
@@ -89,72 +106,61 @@ class TestCleanOcrText:
 
 
 # ---------------------------------------------------------------------------
-# extract_scoreboard() — mocked pytesseract
+# extract_scoreboard() — mocked winocr
 # ---------------------------------------------------------------------------
 
 MOCK_CHAMPION_NAMES = ["Darius", "Lee Sin", "Zed", "Jinx", "Thresh"]
 MOCK_ENEMY_NAMES = ["Garen", "Graves", "Orianna", "Caitlyn", "Lulu"]
 
-# pytesseract will be called 10 times total (5 ally + 5 enemy bands)
-def _make_tess_side_effect(ally: list[str], enemy: list[str]):
-    """Return a side_effect list: first 5 calls = ally, next 5 = enemy."""
-    return [f"{name}\n" for name in ally] + [f"{name}\n" for name in enemy]
-
 
 class TestExtractScoreboard:
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_returns_scoreboard_result(self, mock_tess):
-        mock_tess.side_effect = _make_tess_side_effect(
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_returns_scoreboard_result(self, mock_ocr):
+        mock_ocr.side_effect = _make_winocr_side_effect(
             MOCK_CHAMPION_NAMES, MOCK_ENEMY_NAMES
         )
         img = _blank_image(1340, 760)
         result = extract_scoreboard(img)
         assert isinstance(result, ScoreboardOCRResult)
 
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_ally_names_match(self, mock_tess):
-        mock_tess.side_effect = _make_tess_side_effect(
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_ally_names_match(self, mock_ocr):
+        mock_ocr.side_effect = _make_winocr_side_effect(
             MOCK_CHAMPION_NAMES, MOCK_ENEMY_NAMES
         )
         result = extract_scoreboard(_blank_image(1340, 760))
         assert result.ally_raw == MOCK_CHAMPION_NAMES
 
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_enemy_names_match(self, mock_tess):
-        mock_tess.side_effect = _make_tess_side_effect(
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_enemy_names_match(self, mock_ocr):
+        mock_ocr.side_effect = _make_winocr_side_effect(
             MOCK_CHAMPION_NAMES, MOCK_ENEMY_NAMES
         )
         result = extract_scoreboard(_blank_image(1340, 760))
         assert result.enemy_raw == MOCK_ENEMY_NAMES
 
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_returns_five_per_team(self, mock_tess):
-        mock_tess.side_effect = _make_tess_side_effect(
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_returns_five_per_team(self, mock_ocr):
+        mock_ocr.side_effect = _make_winocr_side_effect(
             MOCK_CHAMPION_NAMES, MOCK_ENEMY_NAMES
         )
         result = extract_scoreboard(_blank_image(1340, 760))
         assert len(result.ally_raw) == 5
         assert len(result.enemy_raw) == 5
 
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_noisy_ocr_output_is_cleaned(self, mock_tess):
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_noisy_ocr_output_is_cleaned(self, mock_ocr):
         noisy = ["D4r1us\n", "Lee  Sin\n", "  Zed  \n", "J!nx\n", "Thresh!\n"]
         # Digits are stripped entirely (fuzzy matcher in champion_parser handles the rest)
         clean = ["Drus", "Lee Sin", "Zed", "Jnx", "Thresh"]
-        mock_tess.side_effect = _make_tess_side_effect(noisy, MOCK_ENEMY_NAMES)
+        mock_ocr.side_effect = _make_winocr_side_effect(noisy, MOCK_ENEMY_NAMES)
         result = extract_scoreboard(_blank_image(1340, 760))
         assert result.ally_raw == clean
 
-    @patch("capture.ocr.pytesseract.image_to_string")
-    def test_tess_called_ten_times(self, mock_tess):
-        mock_tess.side_effect = _make_tess_side_effect(
+    @patch("capture.ocr.winocr.recognize_pil_sync")
+    def test_ocr_called_ten_times(self, mock_ocr):
+        mock_ocr.side_effect = _make_winocr_side_effect(
             MOCK_CHAMPION_NAMES, MOCK_ENEMY_NAMES
         )
         extract_scoreboard(_blank_image(1340, 760))
-        assert mock_tess.call_count == 10
-
-    def test_tesseract_not_found_raises_runtime_error(self):
-        import pytesseract as tess
-        with patch.object(tess, "image_to_string", side_effect=tess.TesseractNotFoundError):
-            with pytest.raises(RuntimeError, match="Tesseract is not installed"):
-                extract_scoreboard(_blank_image(1340, 760))
+        assert mock_ocr.call_count == 10

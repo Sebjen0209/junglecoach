@@ -1,8 +1,6 @@
-# Screen capture
-mss==9.0.2
-
-# OCR
-pytesseract==0.3.13
+# OCR — used by capture/ocr.py and analysis/game_phase.py (legacy / dev path only)
+# The main data pipeline uses the Riot Live Client Data API instead.
+winocr==0.0.15
 Pillow==10.4.0
 
 # AI
@@ -16,14 +14,14 @@ uvicorn[standard]==0.32.1
 pydantic==2.10.3
 pydantic-settings==2.7.0
 
-# HTTP client (scraper)
+# HTTP client (scraper + Riot live client API probe)
 httpx==0.28.1
+
+# Windows process detection (used by lol_phase.py)
+psutil==7.2.2
 
 # Environment
 python-dotenv==1.0.1
-
-# Database
-# SQLite is stdlib — no extra package needed
 
 # Dev / test
 pytest==8.3.4
