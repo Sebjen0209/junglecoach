@@ -13,12 +13,13 @@ from pydantic import BaseModel
 
 from analysis.ai_client import AIClient
 from analysis.game_phase import detect_game_phase
+from analysis.postgame import run_postgame_analysis
 from analysis.suggestion import analyse
 from capture.ocr import extract_scoreboard
 from capture.screen import CaptureLoop
 from config import settings
 from data.db import init_db, seed_power_spikes
-from models import AnalysisResult
+from models import AnalysisResult, PostGameAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +140,31 @@ async def analysis():
 async def subscription():
     """Stub endpoint — full implementation is in the Railway API (Person 2 side)."""
     return SubscriptionResponse(plan="free", valid=True, expires_at=None)
+
+
+@app.get("/postgame/{match_id}", response_model=PostGameAnalysis)
+def postgame(
+    match_id: str,
+    puuid: str | None = None,
+    summoner_name: str | None = None,
+):
+    """Fetch and analyse a completed match, returning timestamped coaching feedback.
+
+    FastAPI runs sync endpoints in a thread pool automatically — safe to use
+    the blocking riotwatcher calls here without asyncio gymnastics.
+
+    Args:
+        match_id:      Riot match ID, e.g. EUW1_7123456789 (path parameter).
+        puuid:         Player PUUID to identify which team's jungler to coach.
+        summoner_name: Alternative to puuid — triggers one extra Riot API call.
+
+    Returns 422 if the match has no jungle participant.
+    Returns 503 if the Riot API is unreachable or the key is invalid.
+    """
+    try:
+        return run_postgame_analysis(match_id, puuid=puuid, summoner_name=summoner_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.error("Post-game analysis failed: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

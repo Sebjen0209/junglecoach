@@ -101,4 +101,32 @@ Format:
 
 ---
 
+## 2026-04-16 — Post-game analysis runs on Railway (cloud), not the local backend
+
+**Decision**: The `analysis/postgame/` module will be deployed to the Railway cloud API, not served from the local `localhost:7429` backend. The Next.js web app will call Railway directly for post-game coaching results.
+
+**Why**: Post-game analysis has no dependency on the local machine — it only needs a match ID, the Riot API, and the Anthropic API. Unlike live analysis (which requires screen capture and OCR), this feature works equally well server-side. Moving it to Railway means users can access their coaching feedback from the web page without the desktop app running, and results can be persisted to Supabase as a game history.
+
+**Alternatives considered**: Keep it on the local backend and have the Electron overlay show a post-game screen (simpler short-term, but results are lost when the app closes and the web page can't access them independently).
+
+**Impact**:
+- Person 1 — `analysis/postgame/` is already written to be stateless and portable. It needs to be mounted in the Railway FastAPI app. `RIOT_API_KEY` and `ANTHROPIC_API_KEY` must be added as Railway env vars. The disk-based timeline cache should be replaced with a Supabase/Redis cache in the cloud version.
+- Person 2 — Railway needs a new `GET /postgame/{match_id}` route. The web app UI should let users submit a match ID and display the `CoachingMoment` list. Persisting results to a `post_game_analyses` Supabase table is a natural extension and enables a match history feature (good premium upsell).
+
+## 2026-04-16 — cloud_api/ service built and architecture locked
+
+**Decision**: Created `cloud_api/` as a self-contained Railway-deployable FastAPI service. It is separate from `backend/` (the local desktop app) and has no screen-capture dependencies. See `docs/postgame-data-flow.md` for the full architecture diagram.
+
+**Key implementation choices made**:
+- **Supabase timeline cache** — raw Riot timeline JSON is stored in `timeline_cache` (JSONB). The first user to request a given match pays the Riot API call; all subsequent requests for that match (by any user) are free. The cache never expires — timelines are immutable.
+- **Idempotency on analysis** — if a user re-requests analysis for a match they've already seen, the persisted result is returned from `post_game_analyses` instantly. No Riot API call, no Claude API call.
+- **JWT auth via Supabase** — `Authorization: Bearer <supabase_access_token>` validated server-side by calling `supabase.auth.get_user()`. No JWT secret management needed on our end.
+- **Region auto-detection** — platform and regional routing are inferred from the match ID prefix (e.g. `EUW1_` → `euw1` / `europe`). No user configuration required.
+- **Fail-fast startup** — missing env vars cause the process to exit at startup, not at first request.
+- **Docs-disabled in production** — `/docs` and `/openapi.json` are disabled when `ENVIRONMENT=production`.
+
+**Impact**:
+- Person 1 — deploy `cloud_api/` to Railway as a new service (separate from any existing services). Set the 5 required env vars. See `.env.example` inside `cloud_api/`.
+- Person 2 — run the two Supabase SQL migrations (in `cloud_api/db/supabase.py` docstring). Call `GET /postgame/{matchId}` with the user's Bearer token. Add `NEXT_PUBLIC_CLOUD_API_URL` to Vercel env vars.
+
 _Add new decisions below this line_

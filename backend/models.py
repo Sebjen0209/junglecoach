@@ -45,3 +45,25 @@ class AnalysisResult(BaseModel):
     patch: str | None = None
     analysed_at: str | None = None
     lanes: dict[str, LaneSuggestion] | None = None
+
+
+class CoachingMoment(BaseModel):
+    """A single timestamped coaching feedback item from post-game analysis."""
+
+    timestamp_str: str
+    what_happened: str
+    was_good_decision: bool
+    reasoning: str
+    suggestion: str | None = None
+
+
+class PostGameAnalysis(BaseModel):
+    """Full response payload for GET /postgame/{match_id}."""
+
+    match_id: str
+    jungler_champion: str
+    analysed_at: str
+    gank_count: int
+    objective_count: int
+    pathing_issue_count: int
+    moments: list[CoachingMoment]
