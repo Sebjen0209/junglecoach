@@ -1,187 +1,96 @@
-"""Screen capture loop and League of Legends window detection.
+"""Background phase monitor for the League of Legends client lifecycle.
 
-Uses mss for fast screenshot capture. Detects LoL by process name so it
-works regardless of window title localisation or multi-monitor setups.
+Runs a lightweight background thread that polls the LoL client processes and
+the Riot Live Client Data API every few seconds to track which lifecycle phase
+the user is in. The FastAPI server reads this state to decide whether to fetch
+a new GameSnapshot from the Live Client API.
+
+Screen capture and OCR have been replaced by the Riot Live Client Data API
+(see capture/live_client.py). This module is now only responsible for phase
+tracking and the /status endpoint state.
 """
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Event, Thread
+from typing import Optional
 
-import mss
-import mss.tools
-from PIL import Image
+from capture.lol_phase import LoLPhase, detect_lol_phase
 
 logger = logging.getLogger(__name__)
 
-# LoL process names across platforms
-_LOL_PROCESS_NAMES = {"League of Legends.exe", "LeagueOfLegends.exe", "LeagueClient.exe"}
-
-# How often to take a full screenshot (seconds)
-_CAPTURE_INTERVAL = 3.0
-
-# Scoreboard region: approximate bounding box of the TAB overlay on a
-# 1920×1080 screen. The overlay fills most of the screen; we crop to the
-# champion-name columns to reduce OCR noise.
-# Format: {"top": y, "left": x, "width": w, "height": h}
-_SCOREBOARD_REGION_1080P = {"top": 130, "left": 290, "width": 1340, "height": 760}
-
-# Timer region: top-centre of screen where the game clock is shown
-_TIMER_REGION_1080P = {"top": 10, "left": 870, "width": 180, "height": 40}
+# How often the background thread polls for phase changes (seconds).
+_POLL_INTERVAL = 3.0
 
 
 @dataclass
 class CaptureState:
-    """Thread-safe snapshot of the capture loop's current state."""
+    """Thread-safe snapshot of the current client lifecycle state."""
 
+    lol_phase: str = "idle"           # LoLPhase.value
     lol_running: bool = False
     game_detected: bool = False
     capture_active: bool = False
-    last_capture_at: datetime | None = None
-    last_scoreboard: Image.Image | None = None
-    last_timer: Image.Image | None = None
-    error: str | None = None
-
-
-def _is_lol_running() -> bool:
-    """Return True if a LoL game process is currently running."""
-    try:
-        import psutil  # optional dependency — graceful fallback if missing
-
-        for proc in psutil.process_iter(["name"]):
-            if proc.info["name"] in _LOL_PROCESS_NAMES:
-                return True
-        return False
-    except ImportError:
-        logger.warning("psutil not installed — cannot detect LoL process. Assuming running.")
-        return True
-    except Exception as exc:
-        logger.warning("Process detection failed: %s", exc)
-        return False
-
-
-def _scale_region(region: dict, screen_width: int, screen_height: int) -> dict:
-    """Scale a 1080p region dict to the actual screen resolution."""
-    sx = screen_width / 1920
-    sy = screen_height / 1080
-    return {
-        "top": int(region["top"] * sy),
-        "left": int(region["left"] * sx),
-        "width": int(region["width"] * sx),
-        "height": int(region["height"] * sy),
-    }
-
-
-def _capture_regions(sct: mss.base.MSSBase) -> tuple[Image.Image, Image.Image]:
-    """Capture the scoreboard and timer regions from the primary monitor.
-
-    Returns:
-        (scoreboard_image, timer_image) as PIL Images.
-    """
-    monitor = sct.monitors[1]  # primary monitor
-    w, h = monitor["width"], monitor["height"]
-
-    scoreboard_region = _scale_region(_SCOREBOARD_REGION_1080P, w, h)
-    timer_region = _scale_region(_TIMER_REGION_1080P, w, h)
-
-    scoreboard_img = Image.frombytes(
-        "RGB",
-        (scoreboard_region["width"], scoreboard_region["height"]),
-        sct.grab(scoreboard_region).rgb,
-    )
-    timer_img = Image.frombytes(
-        "RGB",
-        (timer_region["width"], timer_region["height"]),
-        sct.grab(timer_region).rgb,
-    )
-
-    return scoreboard_img, timer_img
+    last_capture_at: Optional[datetime] = None
+    error: Optional[str] = None
 
 
 class CaptureLoop:
-    """Background thread that takes periodic screenshots while LoL is running.
+    """Background thread that tracks the LoL client lifecycle phase.
 
     Usage::
 
         loop = CaptureLoop()
         loop.start()
-        # ... later ...
-        state = loop.get_state()
+        state = loop.get_state()   # safe to call from any thread
         loop.stop()
     """
 
-    def __init__(self, interval: float = _CAPTURE_INTERVAL) -> None:
+    def __init__(self, interval: float = _POLL_INTERVAL) -> None:
         self._interval = interval
         self._stop_event = Event()
         self._state = CaptureState()
-        self._thread: Thread | None = None
+        self._thread: Optional[Thread] = None
 
     def start(self) -> None:
-        """Start the background capture thread."""
+        """Start the background phase-polling thread."""
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
         self._thread = Thread(target=self._run, daemon=True, name="capture-loop")
         self._thread.start()
-        logger.info("Capture loop started (interval=%.1fs)", self._interval)
+        logger.info("Phase monitor started (poll interval=%.1fs)", self._interval)
 
     def stop(self) -> None:
-        """Signal the capture thread to stop and wait for it."""
+        """Signal the thread to stop and wait for it to finish."""
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=10)
-        logger.info("Capture loop stopped")
+        logger.info("Phase monitor stopped")
 
     def get_state(self) -> CaptureState:
-        """Return a snapshot of the current capture state."""
+        """Return the current captured state (snapshot — safe across threads)."""
         return self._state
 
     def _run(self) -> None:
         self._state.capture_active = True
-        with mss.mss() as sct:
-            while not self._stop_event.is_set():
-                try:
-                    self._tick(sct)
-                except Exception as exc:
-                    logger.error("Capture error: %s", exc, exc_info=True)
-                    self._state.error = str(exc)
-                time.sleep(self._interval)
+        while not self._stop_event.is_set():
+            try:
+                self._tick()
+            except Exception as exc:
+                logger.error("Phase monitor error: %s", exc, exc_info=True)
+                self._state.error = str(exc)
+            time.sleep(self._interval)
         self._state.capture_active = False
 
-    def _tick(self, sct: mss.base.MSSBase) -> None:
-        lol_running = _is_lol_running()
-        self._state.lol_running = lol_running
+    def _tick(self) -> None:
+        phase = detect_lol_phase()
+        self._state.lol_phase = phase.value
+        self._state.lol_running = phase != LoLPhase.IDLE
+        self._state.game_detected = phase == LoLPhase.IN_GAME
 
-        if not lol_running:
-            self._state.game_detected = False
-            return
-
-        scoreboard, timer = _capture_regions(sct)
-
-        # Heuristic game detection: if the timer region contains mostly
-        # dark pixels it's likely the loading screen or lobby — not a live game.
-        self._state.game_detected = _looks_like_live_game(timer)
-        self._state.last_capture_at = datetime.now(timezone.utc)
-        self._state.last_scoreboard = scoreboard
-        self._state.last_timer = timer
-        self._state.error = None
-
-
-def _looks_like_live_game(timer_img: Image.Image) -> bool:
-    """Rough heuristic: does the timer region look like an in-game clock?
-
-    The in-game timer is white text on a semi-transparent dark background.
-    We check whether the image has enough bright pixels to suggest text is
-    present, which rules out the loading screen (fully black) and the lobby.
-
-    This is intentionally conservative — false negatives (missing a capture)
-    are less harmful than false positives (trying to OCR a non-game screen).
-    """
-    grayscale = timer_img.convert("L")
-    pixels = list(grayscale.getdata())
-    bright = sum(1 for p in pixels if p > 180)
-    ratio = bright / len(pixels) if pixels else 0
-    # Expect at least 5% bright pixels (clock digits) but not >60% (white screen)
-    return 0.05 < ratio < 0.60
+        if phase == LoLPhase.IN_GAME:
+            self._state.last_capture_at = datetime.now(timezone.utc)
+            self._state.error = None
