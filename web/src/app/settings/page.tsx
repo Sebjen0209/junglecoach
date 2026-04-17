@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import Link from "next/link";
+import { AppShell } from "@/components/AppShell";
 
 export default async function SettingsPage() {
   const supabase = createClient();
@@ -11,91 +11,85 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
 
   return (
-    <div className="max-w-2xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Account settings</h1>
-        <p className="text-sm text-[#555] mt-1">Manage your account details</p>
-      </div>
+    <AppShell user={user}>
+      <div className="max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          <p className="text-sm text-[#8080A0] mt-1">Manage your account details</p>
+        </div>
 
-      {/* Account info */}
-      <div className="bg-[#13131A] border border-[#1E1E2A] rounded-xl divide-y divide-[#1E1E2A]">
-        <div className="p-6">
-          <h2 className="text-sm font-semibold text-white mb-4">Account</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#555]">Email</span>
-              <span className="text-sm text-white">{user.email}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#555]">User ID</span>
-              <span className="text-xs text-[#444] font-mono">{user.id}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#555]">Member since</span>
-              <span className="text-sm text-[#888]">
-                {new Date(user.created_at).toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
+        {/* Account info */}
+        <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl overflow-hidden">
+          <div className="px-6 py-5 border-b border-[#1C1C2A]">
+            <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-4">Account</p>
+            <div className="space-y-4">
+              <Row label="Email" value={user.email ?? "—"} />
+              <Row label="User ID" value={user.id} mono />
+              <Row
+                label="Member since"
+                value={new Date(user.created_at).toLocaleDateString("en-GB", {
+                  day: "numeric", month: "long", year: "numeric",
                 })}
-              </span>
+              />
             </div>
+          </div>
+
+          <div className="px-6 py-5">
+            <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-4">Password</p>
+            <ChangePasswordForm />
           </div>
         </div>
 
-        <div className="p-6">
-          <h2 className="text-sm font-semibold text-white mb-4">
-            Change password
-          </h2>
-          <ChangePasswordForm />
+        {/* Danger zone */}
+        <div className="bg-[#0E0E18] border border-red-900/20 rounded-xl p-6">
+          <p className="text-[10px] font-bold text-red-500/60 uppercase tracking-[0.15em] mb-3">Danger zone</p>
+          <p className="text-sm text-[#8080A0] mb-4 leading-relaxed">
+            Deleting your account is permanent and cannot be undone. All your data will be removed.
+          </p>
+          <button
+            disabled
+            className="text-sm text-red-500/50 border border-red-900/20 px-4 py-2 rounded-lg cursor-not-allowed"
+          >
+            Delete account
+          </button>
         </div>
       </div>
+    </AppShell>
+  );
+}
 
-      {/* Danger zone */}
-      <div className="bg-[#13131A] border border-red-900/20 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-red-400 mb-2">
-          Danger zone
-        </h2>
-        <p className="text-xs text-[#555] mb-4">
-          Deleting your account is permanent and cannot be undone. All your data
-          will be removed.
-        </p>
-        <button
-          disabled
-          className="text-sm text-red-500 border border-red-900/30 px-4 py-2 rounded-lg opacity-50 cursor-not-allowed"
-        >
-          Delete account
-        </button>
-      </div>
+function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-[#8080A0] shrink-0">{label}</span>
+      <span className={`text-sm text-white truncate ${mono ? "font-mono text-xs text-[#46465C]" : ""}`}>
+        {value}
+      </span>
     </div>
   );
 }
 
 function ChangePasswordForm() {
   return (
-    <form className="space-y-3">
-      <div>
-        <label className="block text-xs text-[#555] mb-1.5">
-          New password
-        </label>
-        <input
-          type="password"
-          name="password"
-          minLength={8}
-          className="w-full bg-[#0A0A0F] border border-[#1E1E2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-[#333] focus:outline-none focus:border-[#E24B4A]/50 transition-colors"
-          placeholder="Min. 8 characters"
-        />
-      </div>
-      <button
-        type="button"
+    <div className="space-y-3">
+      <input
+        type="password"
+        name="password"
+        minLength={8}
         disabled
-        className="text-sm bg-[#1E1E2A] text-[#555] px-4 py-2 rounded-lg cursor-not-allowed"
-      >
-        Update password
-      </button>
-      <p className="text-xs text-[#444]">
-        Password updates handled via email link — coming soon.
-      </p>
-    </form>
+        className="input-base opacity-50 cursor-not-allowed"
+        placeholder="Min. 8 characters"
+      />
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled
+          className="text-sm bg-[#141422] border border-[#1C1C2A] text-[#46465C] px-4 py-2 rounded-lg cursor-not-allowed"
+        >
+          Update password
+        </button>
+        <p className="text-xs text-[#46465C]">Coming soon</p>
+      </div>
+    </div>
   );
 }

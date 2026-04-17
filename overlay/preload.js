@@ -5,3 +5,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   setHeight: (height) => ipcRenderer.send('set-height', height),
 });
+z

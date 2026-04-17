@@ -40,7 +40,11 @@
       "Bash(python:*)",
       "Bash(grep -r:*)",
       "Bash(git stash:*)",
-      "Bash(pip list:*)"
+      "Bash(pip list:*)",
+      "Bash(taskkill /F /IM python.exe /T)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":8000\")",
+      "Bash(taskkill *)"
     ]
   }
 }

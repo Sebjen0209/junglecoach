@@ -11,9 +11,10 @@ export const PLANS = {
     price: 0,
     priceId: null,
     features: [
-      "Basic gank priority (top lane only)",
-      "Manual refresh",
-      "Community support",
+      "Live overlay — always on, unlimited games",
+      "Gank suggestions refresh every 10s",
+      "General gank priority (no match history)",
+      "2 post-game analyses per month",
     ],
   },
   premium_monthly: {
@@ -22,11 +23,10 @@ export const PLANS = {
     interval: "month",
     priceId: process.env.STRIPE_PRICE_PREMIUM_MONTHLY ?? "price_premium_monthly",
     features: [
-      "All 3 lanes with AI reasoning",
-      "Real-time overlay",
-      "Auto-refresh every 5 seconds",
-      "Game phase detection",
-      "Priority support",
+      "Live overlay at full speed (5s refresh)",
+      "10 post-game analyses per month",
+      "Full history dashboard (last 90 days)",
+      "Detailed coaching timeline per match",
     ],
   },
   premium_annual: {
@@ -36,8 +36,7 @@ export const PLANS = {
     priceId: process.env.STRIPE_PRICE_PREMIUM_ANNUAL ?? "price_premium_annual",
     features: [
       "Everything in Premium",
-      "2 months free",
-      "Priority support",
+      "2 months free vs monthly",
     ],
   },
   pro_monthly: {
@@ -46,11 +45,11 @@ export const PLANS = {
     interval: "month",
     priceId: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "price_pro_monthly",
     features: [
-      "Everything in Premium",
-      "Enemy jungler prediction",
-      "Win condition detector",
-      "VOD review",
-      "Dedicated support",
+      "Everything in Pro",
+      "20 post-game analyses per month",
+      "Multi-account support (smurfs)",
+      "Trend analysis — ward scores, gank success rate over time",
+      "Priority API queue (faster analysis)",
     ],
   },
 } as const;

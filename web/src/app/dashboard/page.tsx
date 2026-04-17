@@ -28,19 +28,19 @@ export default async function DashboardPage() {
   const isPremium = plan !== "free";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-[#555] mt-1">
+        <p className="text-sm text-[#8080A0] mt-1">
           Welcome back, {user?.email}
         </p>
       </div>
 
       {/* Plan banner */}
-      <div className="bg-[#13131A] border border-[#1E1E2A] rounded-xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-xs text-[#555] font-medium uppercase tracking-widest mb-2">
+          <p className="text-[10px] text-[#46465C] font-bold uppercase tracking-[0.15em] mb-3">
             Current plan
           </p>
           <SubscriptionStatus
@@ -60,43 +60,26 @@ export default async function DashboardPage() {
       </div>
 
       {/* Get started */}
-      <div className="bg-[#13131A] border border-[#1E1E2A] rounded-xl p-6">
-        <h2 className="text-base font-bold text-white mb-4">
+      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl p-6">
+        <h2 className="text-sm font-bold text-white mb-5 uppercase tracking-wider">
           Get started in 4 steps
         </h2>
-        <ol className="space-y-3">
+        <ol className="space-y-4">
           {DOWNLOAD_STEPS.map((step) => (
-            <li key={step.n} className="flex items-start gap-3">
-              <span className="shrink-0 w-6 h-6 rounded-full bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-xs font-bold flex items-center justify-center">
+            <li key={step.n} className="flex items-start gap-4">
+              <span className="shrink-0 w-6 h-6 rounded-full bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-[10px] font-bold flex items-center justify-center mt-0.5">
                 {step.n}
               </span>
-              <span className="text-sm text-[#888] pt-0.5">{step.text}</span>
+              <span className="text-sm text-[#8080A0] leading-relaxed">{step.text}</span>
             </li>
           ))}
         </ol>
         <a
           href="#"
-          className="inline-flex items-center gap-2 mt-6 bg-[#1E1E2A] hover:bg-[#2A2A3A] text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 mt-6 bg-[#141422] hover:bg-[#1C1C2E] border border-[#1C1C2A] hover:border-[#2A2A3A] text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
         >
           ⬇ Download for Windows
         </a>
-      </div>
-
-      {/* Usage stats placeholder */}
-      <div className="grid sm:grid-cols-3 gap-4">
-        {[
-          { label: "Games analysed", value: "0" },
-          { label: "Gank suggestions", value: "0" },
-          { label: "Overlay opens", value: "0" },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-[#13131A] border border-[#1E1E2A] rounded-xl p-6"
-          >
-            <p className="text-3xl font-bold text-white mb-1">{stat.value}</p>
-            <p className="text-xs text-[#555]">{stat.label}</p>
-          </div>
-        ))}
       </div>
     </div>
   );

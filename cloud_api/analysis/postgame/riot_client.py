@@ -9,7 +9,9 @@ TODO: Extract shared logic into a common package (e.g. packages/analysis)
 """
 
 import logging
+from urllib.parse import quote
 
+import httpx
 from riotwatcher import ApiError, LolWatcher
 
 from config import settings
@@ -74,6 +76,29 @@ def _watcher() -> LolWatcher:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _riot_get(url: str) -> dict:
+    """Make an authenticated GET request to the Riot API.
+
+    Uses httpx directly instead of riotwatcher to avoid auth issues with
+    the developer key.
+
+    Raises:
+        RuntimeError: On non-200 response or network error.
+    """
+    if not settings.riot_api_key:
+        raise RuntimeError("RIOT_API_KEY is not configured.")
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers={"X-Riot-Token": settings.riot_api_key})
+        if resp.status_code == 200:
+            return resp.json()
+        raise RuntimeError(
+            f"Riot API returned HTTP {resp.status_code} for {url}"
+        )
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"Could not reach Riot API at {url}: {exc}") from exc
+
+
 def fetch_match(match_id: str, region: str) -> dict:
     """Fetch the match summary (participants, team stats, final items).
 
@@ -82,11 +107,9 @@ def fetch_match(match_id: str, region: str) -> dict:
     Raises:
         RuntimeError: On Riot API error.
     """
-    try:
-        logger.info("Fetching match summary: %s (%s)", match_id, region)
-        return _watcher().match.by_id(region, match_id)
-    except ApiError as exc:
-        raise RuntimeError(f"Riot API error fetching match {match_id}: {exc}") from exc
+    logger.info("Fetching match summary: %s (%s)", match_id, region)
+    url = f"https://{region}.api.riotgames.com/lol/match/v5/matches/{match_id}"
+    return _riot_get(url)
 
 
 def fetch_timeline(match_id: str, region: str) -> dict:
@@ -104,30 +127,61 @@ def fetch_timeline(match_id: str, region: str) -> dict:
     if cached is not None:
         return cached
 
-    try:
-        logger.info("Fetching timeline from Riot (not cached): %s (%s)", match_id, region)
-        data = _watcher().match.timeline_by_match(region, match_id)
-    except ApiError as exc:
-        raise RuntimeError(f"Riot API error fetching timeline {match_id}: {exc}") from exc
+    logger.info("Fetching timeline from Riot (not cached): %s (%s)", match_id, region)
+    url = f"https://{region}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
+    data = _riot_get(url)
 
     save_cached_timeline(match_id, data)
     return data
 
 
-def fetch_puuid_by_summoner_name(summoner_name: str, platform: str) -> str:
-    """Resolve a summoner name to a PUUID (platform-specific lookup).
+def fetch_puuid_by_summoner_name(summoner_name: str, platform: str, region: str) -> str:
+    """Resolve a summoner name or Riot ID to a PUUID.
+
+    Accepts both formats:
+      - Legacy summoner name: "SomeName"           → Summoner v4 (platform)
+      - Riot ID:              "SomeName#EUW"        → Account v1 (region)
 
     Raises:
-        RuntimeError: If the summoner is not found or the API errors.
+        RuntimeError: If the player is not found or the API errors.
     """
-    try:
-        logger.info("Looking up PUUID for summoner %r on %s", summoner_name, platform)
-        summoner = _watcher().summoner.by_name(platform, summoner_name)
-        return summoner["puuid"]
-    except ApiError as exc:
-        raise RuntimeError(
-            f"Could not find summoner {summoner_name!r} on {platform}: {exc}"
-        ) from exc
+    watcher = _watcher()
+
+    if "#" in summoner_name:
+        # New Riot ID format: "Game Name#TAG"
+        # LolWatcher doesn't expose Account v1 — call the Riot API directly.
+        game_name, tag_line = summoner_name.rsplit("#", 1)
+        url = (
+            f"https://{region}.api.riotgames.com/riot/account/v1/accounts"
+            f"/by-riot-id/{quote(game_name.strip())}/{quote(tag_line.strip())}"
+        )
+        try:
+            logger.info(
+                "Looking up PUUID for Riot ID %r (region=%s)", summoner_name, region
+            )
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(url, headers={"X-Riot-Token": settings.riot_api_key})
+            if resp.status_code == 200:
+                return resp.json()["puuid"]
+            raise RuntimeError(
+                f"Riot Account API returned HTTP {resp.status_code} for {summoner_name!r}"
+            )
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                f"Could not reach Riot Account API for {summoner_name!r}: {exc}"
+            ) from exc
+    else:
+        # Legacy summoner name
+        try:
+            logger.info(
+                "Looking up PUUID for summoner %r on %s", summoner_name, platform
+            )
+            summoner = watcher.summoner.by_name(platform, summoner_name)
+            return summoner["puuid"]
+        except ApiError as exc:
+            raise RuntimeError(
+                f"Could not find summoner {summoner_name!r} on {platform}: {exc}"
+            ) from exc
 
 
 def get_recent_match_ids(puuid: str, region: str, count: int = 5) -> list[str]:
