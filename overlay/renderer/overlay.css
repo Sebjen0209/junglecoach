@@ -1,0 +1,229 @@
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Root ──────────────────────────────────────────────────── */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  font-size: 12px;
+  background: transparent;
+  color: #c8c8d0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  background: rgba(10, 10, 15, 0.88);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-app-region: drag;
+}
+
+.logo {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5db86f;
+}
+
+.window-controls {
+  display: flex;
+  gap: 3px;
+  -webkit-app-region: no-drag;
+}
+
+.ctrl-btn {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: color 0.12s, background 0.12s;
+}
+.ctrl-btn:hover           { color: #aaa; background: rgba(255, 255, 255, 0.07); }
+.ctrl-btn.close:hover     { color: #e24b4a; background: rgba(226, 75, 74, 0.14); }
+
+/* ── Meta row ──────────────────────────────────────────────── */
+.meta-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.meta-item {
+  font-size: 10px;
+  color: #4a4a56;
+  letter-spacing: 0.03em;
+}
+
+/* ── Lanes ─────────────────────────────────────────────────── */
+.lanes { display: flex; flex-direction: column; }
+
+.lane-card {
+  border-left: 3px solid #2a2a2e;
+  background: transparent;
+  padding: 8px 10px 8px 9px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.12s;
+}
+.lane-card:last-child     { border-bottom: none; }
+.lane-card:hover          { background: rgba(255, 255, 255, 0.03); }
+
+.lane-card.priority-high   {
+  border-left-color: #e24b4a;
+  background: rgba(226, 75, 74, 0.06);
+}
+.lane-card.priority-medium {
+  border-left-color: #ef9f27;
+  background: rgba(239, 159, 39, 0.06);
+}
+.lane-card.priority-low    {
+  border-left-color: #2a2a2e;
+  background: transparent;
+}
+
+.lane-card.priority-high:hover   { background: rgba(226, 75, 74, 0.10); }
+.lane-card.priority-medium:hover { background: rgba(239, 159, 39, 0.10); }
+.lane-card.priority-low:hover    { background: rgba(255, 255, 255, 0.03); }
+
+/* ── Lane row ──────────────────────────────────────────────── */
+.lane-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lane-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #555;
+  width: 26px;
+  flex-shrink: 0;
+}
+
+.matchup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ally {
+  color: #d0d0da;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 76px;
+}
+
+.vs {
+  color: #383840;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.enemy {
+  color: #7a7a88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 76px;
+}
+
+.right-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.winrate {
+  font-size: 10px;
+  color: #4a4a56;
+}
+
+.priority-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.badge-high   { color: #e24b4a; background: rgba(226, 75, 74, 0.16); }
+.badge-medium { color: #ef9f27; background: rgba(239, 159, 39, 0.16); }
+.badge-low    { color: #444450; background: rgba(255, 255, 255, 0.05); }
+
+/* ── Expanded reason ───────────────────────────────────────── */
+.reason-text {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8a8a9a;
+}
+
+/* ── Hint ──────────────────────────────────────────────────── */
+.hint {
+  text-align: center;
+  font-size: 9px;
+  color: #2e2e38;
+  padding: 5px 0 6px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Status messages ───────────────────────────────────────── */
+.status-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 18px 14px 16px;
+  text-align: center;
+  color: #454554;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.status-msg.offline { color: #8a3535; }
+.status-msg small   { font-size: 10px; color: #333340; }
+.status-msg code    { font-family: 'Consolas', 'Menlo', monospace; color: #3d3d50; }
+
+/* ── Ellipsis animation (waiting state) ────────────────────── */
+@keyframes ellipsis {
+  0%   { content: '.'; }
+  33%  { content: '..'; }
+  66%  { content: '...'; }
+  100% { content: ''; }
+}
+
+.ellipsis::after {
+  content: '';
+  animation: ellipsis 1.5s steps(1, end) infinite;
+  display: inline-block;
+  width: 1.4ch;
+  text-align: left;
+}
