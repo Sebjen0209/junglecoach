@@ -51,7 +51,7 @@ def run_postgame_analysis(
     logger.info("Routing: match=%s platform=%s region=%s", match_id, platform, region)
 
     if puuid is None and summoner_name:
-        puuid = fetch_puuid_by_summoner_name(summoner_name, platform)
+        puuid = fetch_puuid_by_summoner_name(summoner_name, platform, region)
 
     match_data = fetch_match(match_id, region)
     timeline_data = fetch_timeline(match_id, region)

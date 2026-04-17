@@ -74,10 +74,11 @@ def get_coaching_feedback(
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     logger.info("Calling Claude for post-game coaching (%d events, %s)", len(events), champion_name)
+    logger.debug("Claude prompt:\n%s", _build_prompt(events, champion_name))
 
     response = client.messages.create(
         model=settings.ai_model,
-        max_tokens=2048,
+        max_tokens=8192,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": _build_prompt(events, champion_name)}],
     )
