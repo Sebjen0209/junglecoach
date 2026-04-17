@@ -129,4 +129,49 @@ Format:
 - Person 1 — deploy `cloud_api/` to Railway as a new service (separate from any existing services). Set the 5 required env vars. See `.env.example` inside `cloud_api/`.
 - Person 2 — run the two Supabase SQL migrations (in `cloud_api/db/supabase.py` docstring). Call `GET /postgame/{matchId}` with the user's Bearer token. Add `NEXT_PUBLIC_CLOUD_API_URL` to Vercel env vars.
 
+---
+
+## 2026-04-15 — Replace OCR pipeline with Riot Live Client Data API
+
+**Decision**: The main data pipeline now reads champion names, CS, kills, and
+game time directly from the Riot Live Client Data API (`https://127.0.0.1:2999`)
+instead of via screen capture and OCR.
+
+**Why**: OCR required the player to hold TAB open to get champion names — poor
+UX and fundamentally wrong. Champions are fixed after champion select and don't
+need re-reading. What actually changes during a game (CS, kills, game time) was
+*not* being tracked at all. The Live Client API is Riot's official local API for
+exactly this use case: it provides real-time structured data, requires no player
+interaction, and only exposes information already visible to the player.
+
+**What changed**:
+- `capture/live_client.py` (new) — fetches `/liveclientdata/allgamedata` every
+  request cycle; produces a `GameSnapshot` with all 10 players' champions,
+  positions, CS, kills, and game time.
+- `capture/screen.py` (simplified) — stripped to a lightweight phase monitor;
+  no longer does any screen capture or image processing.
+- `analysis/game_phase.py` — added `game_time_to_phase(seconds)` as the primary
+  path; the OCR-based `detect_game_phase()` is kept for offline dev/testing only.
+- `analysis/suggestion.py` — `analyse()` now takes a `GameSnapshot` instead of
+  a `ScoreboardOCRResult`; CS diffs are fed from live data automatically.
+- `server.py` — `/analysis` calls `get_snapshot()` directly; no OCR in the path.
+- `requirements.txt` — removed `mss` and `pywin32` (no longer needed).
+- `ocr.py` and `champion_parser.py` retained as-is (tests still pass; useful for
+  debugging and any future screenshot-based work).
+
+**Riot compliance**: The Live Client Data API is documented and explicitly
+permitted for third-party tools. It exposes only player-visible data — no
+fog-of-war information, no hidden cooldowns. This is strictly more compliant
+than the previous OCR approach (which could theoretically be extended to read
+anything on screen). Reference: developer.riotgames.com/docs/lol#game-client-api
+
+**Alternatives considered**: Keeping OCR as a fallback (rejected — adds
+complexity with no benefit; the API is more reliable in every dimension).
+
+**Impact**: Person 1 — main data pipeline is now Live Client API only. OCR
+modules are deprioritised but not deleted. Person 2 — no change to the API
+contract or overlay.
+
+---
+
 _Add new decisions below this line_

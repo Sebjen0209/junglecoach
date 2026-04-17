@@ -19,7 +19,26 @@
       "Bash(git add:*)",
       "mcp__ide__getDiagnostics",
       "Bash(node -e \"require\\('./web/node_modules/framer-motion/package.json'\\)\")",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(venvScriptspip install:*)",
+      "Bash(\"venv/Scripts/pip\" install:*)",
+      "Bash(\"venv/Scripts/python\" -c \"from capture.lol_phase import detect_lol_phase; from capture.ocr import extract_scoreboard; from capture.screen import CaptureLoop; print\\(''imports ok''\\)\")",
+      "Bash(\"venv/Scripts/pytest\" tests/test_ocr.py -v)",
+      "Bash(curl -sk \"https://127.0.0.1:2999/liveclientdata/allgamedata\")",
+      "Bash(python -m json.tool)",
+      "Bash(python -c \"import json,sys; data=json.load\\(sys.stdin\\); p=data[''''allPlayers''''][0]; print\\(json.dumps\\({k:p[k] for k in [''''championName'''',''''level'''',''''summonerSpells'''',''''scores'''',''''position'''',''''team'''']}, indent=2\\)\\)\")",
+      "Bash(venvScriptspython -m pytest tests/test_live_client.py -v)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/test_live_client.py -v)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/test_experience.py tests/test_live_client.py -v)",
+      "Bash(\"venv/Scripts/python.exe\" data/scraper.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m data.scraper)",
+      "Bash(\"venv/Scripts/python.exe\" -m data.scraper --defaults)",
+      "Bash(\"venv/Scripts/python.exe\" -c \":*)",
+      "Bash(curl:*)",
+      "Bash(python -c \"from data.scraper_playwright import scrape; print\\(''scraper_playwright imports OK''\\)\")",
+      "Bash(python -c \"from data.riot_api import fetch_profiles; print\\(''riot_api imports OK''\\)\")",
+      "Bash(python:*)",
+      "Bash(grep -r:*)"
     ]
   }
 }

@@ -1,7 +1,24 @@
 """Shared Pydantic data models for the JungleCoach backend."""
 
+from dataclasses import dataclass
 from typing import Literal
 from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# Player profile (fetched from Riot API once per game)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PlayerProfile:
+    """Champion mastery and rank data for one player in the current game."""
+
+    summoner_name: str
+    champion_name: str
+    mastery_level: int      # 1–7 per Riot's mastery system
+    mastery_points: int     # raw mastery XP (hundreds of games = millions of points)
+    rank_tier: int          # 0 = unranked, 1 = Iron … 10 = Challenger
+    rank_name: str          # e.g. "GOLD", "PLATINUM", "UNRANKED"
 
 
 class LaneState(BaseModel):
