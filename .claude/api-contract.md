@@ -26,11 +26,12 @@ Simple health check. Used by the overlay to know if the backend is running.
 
 ## GET /status
 
-Returns whether a LoL game is currently detected on screen.
+Returns the current League of Legends client lifecycle phase and capture status.
 
 **Response 200**
 ```json
 {
+  "lol_phase": "in_game",
   "lol_running": true,
   "game_detected": true,
   "capture_active": true,
@@ -38,8 +39,14 @@ Returns whether a LoL game is currently detected on screen.
 }
 ```
 
-`lol_running` — League of Legends process is running
-`game_detected` — a live game is in progress (vs lobby/champion select)
+`lol_phase` — current client phase: `"idle"` | `"client"` | `"loading"` | `"in_game"`
+- `idle` — no League processes running
+- `client` — client open (lobby, champion select, post-game lobby)
+- `loading` — game process running, loading screen in progress
+- `in_game` — active live game, analysis is running
+
+`lol_running` — any League process is running (`lol_phase != "idle"`)
+`game_detected` — secondary heuristic confirming live game via timer region brightness
 `capture_active` — the capture loop is running without errors
 `last_capture_at` — ISO timestamp of last successful screen read
 
@@ -172,5 +179,6 @@ Common error codes:
 | Version | Date | Change |
 |---|---|---|
 | 0.1.0 | 2024-03-01 | Initial contract |
+| 0.2.0 | 2026-04-15 | `/status` — added `lol_phase` field; overlay should use this instead of `lol_running` for UI state |
 
 When you bump the version, add a row here and update both sides.

@@ -1,7 +1,24 @@
 """Shared Pydantic data models for the JungleCoach backend."""
 
+from dataclasses import dataclass
 from typing import Literal
 from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# Player profile (fetched from Riot API once per game)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PlayerProfile:
+    """Champion mastery and rank data for one player in the current game."""
+
+    summoner_name: str
+    champion_name: str
+    mastery_level: int      # 1–7 per Riot's mastery system
+    mastery_points: int     # raw mastery XP (hundreds of games = millions of points)
+    rank_tier: int          # 0 = unranked, 1 = Iron … 10 = Challenger
+    rank_name: str          # e.g. "GOLD", "PLATINUM", "UNRANKED"
 
 
 class LaneState(BaseModel):
@@ -45,3 +62,25 @@ class AnalysisResult(BaseModel):
     patch: str | None = None
     analysed_at: str | None = None
     lanes: dict[str, LaneSuggestion] | None = None
+
+
+class CoachingMoment(BaseModel):
+    """A single timestamped coaching feedback item from post-game analysis."""
+
+    timestamp_str: str
+    what_happened: str
+    was_good_decision: bool
+    reasoning: str
+    suggestion: str | None = None
+
+
+class PostGameAnalysis(BaseModel):
+    """Full response payload for GET /postgame/{match_id}."""
+
+    match_id: str
+    jungler_champion: str
+    analysed_at: str
+    gank_count: int
+    objective_count: int
+    pathing_issue_count: int
+    moments: list[CoachingMoment]

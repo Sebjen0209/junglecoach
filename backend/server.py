@@ -7,22 +7,23 @@ Endpoints match the API contract in .claude/api-contract.md exactly.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from analysis.ai_client import AIClient
-from analysis.game_phase import detect_game_phase
+from analysis.postgame import run_postgame_analysis
 from analysis.suggestion import analyse
-from capture.ocr import extract_scoreboard
+from capture.live_client import get_snapshot
 from capture.screen import CaptureLoop
 from config import settings
 from data.db import init_db, seed_power_spikes
-from models import AnalysisResult
+from data.riot_api import fetch_champion_id_map, fetch_profiles
+from models import AnalysisResult, PlayerProfile, PostGameAnalysis
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+_VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Application state (shared across requests)
@@ -32,11 +33,20 @@ _capture_loop: CaptureLoop | None = None
 _ai_client: AIClient | None = None
 _last_analysis: AnalysisResult = AnalysisResult(game_detected=False)
 
+# Champion name → Riot champion ID (fetched from Data Dragon once at startup).
+# Used to resolve champion names to IDs for the mastery API endpoint.
+_champion_id_map: dict[str, int] = {}
+
+# Player profiles for the current game, keyed by summoner name.
+# Fetched once when a game is first detected, cleared when the game ends.
+_player_profiles: dict[str, PlayerProfile] = {}
+_profiles_loaded_for_current_game: bool = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start capture loop and AI client on startup; stop on shutdown."""
-    global _capture_loop, _ai_client
+    """Start services on startup; stop cleanly on shutdown."""
+    global _capture_loop, _ai_client, _champion_id_map
 
     logger.info("JungleCoach backend starting up (v%s)", _VERSION)
     init_db()
@@ -46,26 +56,32 @@ async def lifespan(app: FastAPI):
     _capture_loop = CaptureLoop()
     _capture_loop.start()
 
+    # Pre-fetch the champion ID map so it's ready when a game starts.
+    # This is a one-time call to Data Dragon CDN — fast and non-blocking startup.
+    _champion_id_map = await fetch_champion_id_map()
+    logger.info("Loaded %d champion IDs from Data Dragon", len(_champion_id_map))
+
     yield
 
-    logger.info("Shutting down capture loop...")
+    logger.info("Shutting down phase monitor...")
     if _capture_loop:
         _capture_loop.stop()
 
 
 app = FastAPI(title="JungleCoach", version=_VERSION, lifespan=lifespan)
 
-# Allow the Electron overlay (file:// origin) to call the local API
+# Allow the Electron overlay (file:// origin) to call the local API.
+# Binding to 127.0.0.1 means this is only reachable from the same machine.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local only — binding to 127.0.0.1 keeps this safe
+    allow_origins=["*"],
     allow_methods=["GET"],
     allow_headers=["Authorization"],
 )
 
 
 # ---------------------------------------------------------------------------
-# Response models (inline — small enough not to warrant a separate file)
+# Response models
 # ---------------------------------------------------------------------------
 
 class HealthResponse(BaseModel):
@@ -74,6 +90,7 @@ class HealthResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
+    lol_phase: str          # "idle" | "client" | "loading" | "in_game"
     lol_running: bool
     game_detected: bool
     capture_active: bool
@@ -91,51 +108,98 @@ class SubscriptionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/health", response_model=HealthResponse)
-async def health():
+async def health() -> HealthResponse:
     return HealthResponse(status="ok", version=_VERSION)
 
 
 @app.get("/status", response_model=StatusResponse)
-async def status():
+async def status() -> StatusResponse:
     if _capture_loop is None:
         return StatusResponse(
-            lol_running=False, game_detected=False,
-            capture_active=False, last_capture_at=None,
+            lol_phase="idle",
+            lol_running=False,
+            game_detected=False,
+            capture_active=False,
+            last_capture_at=None,
         )
     state = _capture_loop.get_state()
     return StatusResponse(
+        lol_phase=state.lol_phase,
         lol_running=state.lol_running,
         game_detected=state.game_detected,
         capture_active=state.capture_active,
-        last_capture_at=state.last_capture_at.isoformat() if state.last_capture_at else None,
+        last_capture_at=(
+            state.last_capture_at.isoformat() if state.last_capture_at else None
+        ),
     )
 
 
 @app.get("/analysis", response_model=AnalysisResult)
-async def analysis():
-    global _last_analysis
+async def analysis() -> AnalysisResult:
+    global _last_analysis, _player_profiles, _profiles_loaded_for_current_game
 
-    if _capture_loop is None:
+    # Fast-path: phase monitor says no game is running.
+    if _capture_loop is not None and not _capture_loop.get_state().game_detected:
+        # Clear stale profiles from the previous game.
+        if _profiles_loaded_for_current_game:
+            _player_profiles = {}
+            _profiles_loaded_for_current_game = False
         return AnalysisResult(game_detected=False)
 
-    state = _capture_loop.get_state()
-
-    if not state.game_detected or state.last_scoreboard is None:
+    snapshot = get_snapshot()
+    if snapshot is None:
         return AnalysisResult(game_detected=False)
+
+    # Fetch player profiles once when the game is first detected.
+    # We skip this if RIOT_API_KEY is not configured (graceful degradation).
+    if not _profiles_loaded_for_current_game and settings.riot_api_key:
+        players = [
+            (p.summoner_name, p.champion_name)
+            for p in snapshot.ally_players + snapshot.enemy_players
+        ]
+        _player_profiles = await fetch_profiles(
+            players, _champion_id_map, settings.riot_region, settings.riot_api_key
+        )
+        _profiles_loaded_for_current_game = True
 
     try:
-        ocr_result = extract_scoreboard(state.last_scoreboard)
-        phase, minute = detect_game_phase(state.last_timer) if state.last_timer else ("early", 0)
-        _last_analysis = analyse(ocr_result, phase, minute, _ai_client)
+        _last_analysis = analyse(snapshot, _ai_client, _player_profiles or None)
     except Exception as exc:
         logger.error("Analysis pipeline error: %s", exc, exc_info=True)
-        # Return last known good result rather than an error
         return _last_analysis
 
     return _last_analysis
 
 
 @app.get("/subscription", response_model=SubscriptionResponse)
-async def subscription():
+async def subscription() -> SubscriptionResponse:
     """Stub endpoint — full implementation is in the Railway API (Person 2 side)."""
     return SubscriptionResponse(plan="free", valid=True, expires_at=None)
+
+
+@app.get("/postgame/{match_id}", response_model=PostGameAnalysis)
+def postgame(
+    match_id: str,
+    puuid: str | None = None,
+    summoner_name: str | None = None,
+):
+    """Fetch and analyse a completed match, returning timestamped coaching feedback.
+
+    FastAPI runs sync endpoints in a thread pool automatically — safe to use
+    the blocking riotwatcher calls here without asyncio gymnastics.
+
+    Args:
+        match_id:      Riot match ID, e.g. EUW1_7123456789 (path parameter).
+        puuid:         Player PUUID to identify which team's jungler to coach.
+        summoner_name: Alternative to puuid — triggers one extra Riot API call.
+
+    Returns 422 if the match has no jungle participant.
+    Returns 503 if the Riot API is unreachable or the key is invalid.
+    """
+    try:
+        return run_postgame_analysis(match_id, puuid=puuid, summoner_name=summoner_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.error("Post-game analysis failed: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

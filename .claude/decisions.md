@@ -101,4 +101,77 @@ Format:
 
 ---
 
+## 2026-04-16 — Post-game analysis runs on Railway (cloud), not the local backend
+
+**Decision**: The `analysis/postgame/` module will be deployed to the Railway cloud API, not served from the local `localhost:7429` backend. The Next.js web app will call Railway directly for post-game coaching results.
+
+**Why**: Post-game analysis has no dependency on the local machine — it only needs a match ID, the Riot API, and the Anthropic API. Unlike live analysis (which requires screen capture and OCR), this feature works equally well server-side. Moving it to Railway means users can access their coaching feedback from the web page without the desktop app running, and results can be persisted to Supabase as a game history.
+
+**Alternatives considered**: Keep it on the local backend and have the Electron overlay show a post-game screen (simpler short-term, but results are lost when the app closes and the web page can't access them independently).
+
+**Impact**:
+- Person 1 — `analysis/postgame/` is already written to be stateless and portable. It needs to be mounted in the Railway FastAPI app. `RIOT_API_KEY` and `ANTHROPIC_API_KEY` must be added as Railway env vars. The disk-based timeline cache should be replaced with a Supabase/Redis cache in the cloud version.
+- Person 2 — Railway needs a new `GET /postgame/{match_id}` route. The web app UI should let users submit a match ID and display the `CoachingMoment` list. Persisting results to a `post_game_analyses` Supabase table is a natural extension and enables a match history feature (good premium upsell).
+
+## 2026-04-16 — cloud_api/ service built and architecture locked
+
+**Decision**: Created `cloud_api/` as a self-contained Railway-deployable FastAPI service. It is separate from `backend/` (the local desktop app) and has no screen-capture dependencies. See `docs/postgame-data-flow.md` for the full architecture diagram.
+
+**Key implementation choices made**:
+- **Supabase timeline cache** — raw Riot timeline JSON is stored in `timeline_cache` (JSONB). The first user to request a given match pays the Riot API call; all subsequent requests for that match (by any user) are free. The cache never expires — timelines are immutable.
+- **Idempotency on analysis** — if a user re-requests analysis for a match they've already seen, the persisted result is returned from `post_game_analyses` instantly. No Riot API call, no Claude API call.
+- **JWT auth via Supabase** — `Authorization: Bearer <supabase_access_token>` validated server-side by calling `supabase.auth.get_user()`. No JWT secret management needed on our end.
+- **Region auto-detection** — platform and regional routing are inferred from the match ID prefix (e.g. `EUW1_` → `euw1` / `europe`). No user configuration required.
+- **Fail-fast startup** — missing env vars cause the process to exit at startup, not at first request.
+- **Docs-disabled in production** — `/docs` and `/openapi.json` are disabled when `ENVIRONMENT=production`.
+
+**Impact**:
+- Person 1 — deploy `cloud_api/` to Railway as a new service (separate from any existing services). Set the 5 required env vars. See `.env.example` inside `cloud_api/`.
+- Person 2 — run the two Supabase SQL migrations (in `cloud_api/db/supabase.py` docstring). Call `GET /postgame/{matchId}` with the user's Bearer token. Add `NEXT_PUBLIC_CLOUD_API_URL` to Vercel env vars.
+
+---
+
+## 2026-04-15 — Replace OCR pipeline with Riot Live Client Data API
+
+**Decision**: The main data pipeline now reads champion names, CS, kills, and
+game time directly from the Riot Live Client Data API (`https://127.0.0.1:2999`)
+instead of via screen capture and OCR.
+
+**Why**: OCR required the player to hold TAB open to get champion names — poor
+UX and fundamentally wrong. Champions are fixed after champion select and don't
+need re-reading. What actually changes during a game (CS, kills, game time) was
+*not* being tracked at all. The Live Client API is Riot's official local API for
+exactly this use case: it provides real-time structured data, requires no player
+interaction, and only exposes information already visible to the player.
+
+**What changed**:
+- `capture/live_client.py` (new) — fetches `/liveclientdata/allgamedata` every
+  request cycle; produces a `GameSnapshot` with all 10 players' champions,
+  positions, CS, kills, and game time.
+- `capture/screen.py` (simplified) — stripped to a lightweight phase monitor;
+  no longer does any screen capture or image processing.
+- `analysis/game_phase.py` — added `game_time_to_phase(seconds)` as the primary
+  path; the OCR-based `detect_game_phase()` is kept for offline dev/testing only.
+- `analysis/suggestion.py` — `analyse()` now takes a `GameSnapshot` instead of
+  a `ScoreboardOCRResult`; CS diffs are fed from live data automatically.
+- `server.py` — `/analysis` calls `get_snapshot()` directly; no OCR in the path.
+- `requirements.txt` — removed `mss` and `pywin32` (no longer needed).
+- `ocr.py` and `champion_parser.py` retained as-is (tests still pass; useful for
+  debugging and any future screenshot-based work).
+
+**Riot compliance**: The Live Client Data API is documented and explicitly
+permitted for third-party tools. It exposes only player-visible data — no
+fog-of-war information, no hidden cooldowns. This is strictly more compliant
+than the previous OCR approach (which could theoretically be extended to read
+anything on screen). Reference: developer.riotgames.com/docs/lol#game-client-api
+
+**Alternatives considered**: Keeping OCR as a fallback (rejected — adds
+complexity with no benefit; the API is more reliable in every dimension).
+
+**Impact**: Person 1 — main data pipeline is now Live Client API only. OCR
+modules are deprioritised but not deleted. Person 2 — no change to the API
+contract or overlay.
+
+---
+
 _Add new decisions below this line_

@@ -2,31 +2,26 @@
 
 Pipeline per capture:
   1. Receive a scoreboard PIL Image from screen.py
-  2. Pre-process: grayscale → threshold → upscale (improves Tesseract accuracy)
-  3. Run pytesseract on the image
+  2. Pre-process: grayscale → threshold → upscale
+  3. Run Windows built-in OCR (via winocr) on each band
   4. Split raw text into two team rows (ally / enemy)
   5. Return two lists of 5 raw strings each (one per lane)
 
-The caller (champion_parser.py) is responsible for fuzzy-matching the raw
-strings to canonical champion names.
+Uses Windows 10/11 built-in OCR (Windows.Media.Ocr) via the winocr package —
+no external binary required. The caller (champion_parser.py) is responsible
+for fuzzy-matching the raw strings to canonical champion names.
 """
 
 import logging
 import re
 from dataclasses import dataclass
 
-import pytesseract
+import winocr
 from PIL import Image, ImageFilter, ImageOps
 
 logger = logging.getLogger(__name__)
 
-# Tesseract config: single-column text, digits+letters only (champion names
-# never have punctuation in the scoreboard font). Page segmentation mode 6
-# treats the image as a single uniform block of text.
-_TESS_CONFIG = "--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' ."
-
-# Upscale factor applied before OCR — Tesseract accuracy improves significantly
-# when characters are at least 30px tall.
+# Upscale factor applied before OCR — larger characters improve recognition accuracy.
 _UPSCALE_FACTOR = 2
 
 # The scoreboard has two halves: ally team (left) and enemy team (right).
@@ -88,7 +83,8 @@ def _extract_champion_names_from_half(half_img: Image.Image) -> list[str]:
         bottom = (i + 1) * band_height if i < _NUM_CHAMPIONS - 1 else h
         band = half_img.crop((0, top, w, bottom))
         processed = preprocess(band)
-        raw = pytesseract.image_to_string(processed, config=_TESS_CONFIG)
+        ocr_result = winocr.recognize_pil_sync(processed, "en")
+        raw = "\n".join(line.text for line in ocr_result.lines) if ocr_result.lines else ""
         cleaned = _clean_ocr_text(raw)
         names.append(cleaned)
         logger.debug("OCR band %d → %r", i, cleaned)
@@ -118,24 +114,14 @@ def extract_scoreboard(scoreboard_img: Image.Image) -> ScoreboardOCRResult:
 
     Returns:
         ScoreboardOCRResult with ally_raw and enemy_raw lists of 5 strings.
-
-    Raises:
-        RuntimeError: If Tesseract is not installed or cannot be found.
     """
-    try:
-        ally_half = _crop_half(scoreboard_img, _ALLY_X_RATIO)
-        enemy_half = _crop_half(scoreboard_img, _ENEMY_X_RATIO)
+    ally_half = _crop_half(scoreboard_img, _ALLY_X_RATIO)
+    enemy_half = _crop_half(scoreboard_img, _ENEMY_X_RATIO)
 
-        ally_raw = _extract_champion_names_from_half(ally_half)
-        enemy_raw = _extract_champion_names_from_half(enemy_half)
+    ally_raw = _extract_champion_names_from_half(ally_half)
+    enemy_raw = _extract_champion_names_from_half(enemy_half)
 
-        logger.debug("OCR ally: %s", ally_raw)
-        logger.debug("OCR enemy: %s", enemy_raw)
+    logger.debug("OCR ally: %s", ally_raw)
+    logger.debug("OCR enemy: %s", enemy_raw)
 
-        return ScoreboardOCRResult(ally_raw=ally_raw, enemy_raw=enemy_raw)
-
-    except pytesseract.TesseractNotFoundError as exc:
-        raise RuntimeError(
-            "Tesseract is not installed or not on PATH. "
-            "Install from https://github.com/UB-Mannheim/tesseract/wiki"
-        ) from exc
+    return ScoreboardOCRResult(ally_raw=ally_raw, enemy_raw=enemy_raw)
