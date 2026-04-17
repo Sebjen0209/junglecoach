@@ -3,24 +3,113 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0a0a0f;
-  --surface: #13131a;
-  --border: #1e1e2a;
+  --bg:              #07070D;
+  --surface:         #0E0E18;
+  --surface-2:       #141422;
+  --border:          #1C1C2A;
+  --border-subtle:   #141420;
+  --text-primary:    #EDEDF0;
+  --text-secondary:  #8080A0;
+  --text-muted:      #46465C;
+  --accent:          #E24B4A;
+  --accent-dim:      rgba(226, 75, 74, 0.12);
+  --accent-border:   rgba(226, 75, 74, 0.25);
 }
 
 body {
   background-color: var(--bg);
-  color: #e5e5e5;
+  color: var(--text-primary);
   font-family: Inter, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: #e24b4a33;
+  background: rgba(226, 75, 74, 0.25);
 }
 
-/* Remove number input spinners */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
+}
+
+@layer utilities {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.875rem;
+  }
+
+  .card-hover {
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .card-hover:hover {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 1px rgba(226, 75, 74, 0.06), 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .input-base {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    width: 100%;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  .input-base::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-base:focus {
+    border-color: rgba(226, 75, 74, 0.4);
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: background 0.2s, transform 0.1s;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-primary:hover {
+    background: #d03d3c;
+  }
+
+  .btn-primary:active {
+    transform: scale(0.98);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-ghost:hover {
+    color: var(--text-primary);
+    border-color: #2A2A3A;
+    background: var(--surface);
+  }
 }

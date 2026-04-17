@@ -36,72 +36,70 @@ function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-sm bg-[#13131A] border border-[#1E1E2A] rounded-xl p-8">
-      <h1 className="text-xl font-bold text-white mb-1">Welcome back</h1>
-      <p className="text-sm text-[#555] mb-6">Log in to your account</p>
+    <div className="w-full max-w-sm">
+      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-2xl p-8 shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
+        <h1 className="text-xl font-bold text-white mb-1">Welcome back</h1>
+        <p className="text-sm text-[#8080A0] mb-7">Log in to your account</p>
 
-      {(error || urlError) && (
-        <div className="bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-sm px-4 py-3 rounded-lg mb-4">
-          {error ?? (urlReason ?? "Authentication failed. Please try again.")}
-        </div>
-      )}
+        {(error || urlError) && (
+          <div className="bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-sm px-4 py-3 rounded-lg mb-5">
+            {error ?? (urlReason ?? "Authentication failed. Please try again.")}
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-[#888] mb-1.5">
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            className="w-full bg-[#0A0A0F] border border-[#1E1E2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-[#333] focus:outline-none focus:border-[#E24B4A]/50 transition-colors"
-            placeholder="you@example.com"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[#888] mb-1.5">
-            Password
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            className="w-full bg-[#0A0A0F] border border-[#1E1E2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-[#333] focus:outline-none focus:border-[#E24B4A]/50 transition-colors"
-            placeholder="••••••••"
-          />
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[#8080A0] mb-1.5 uppercase tracking-wider">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              className="input-base"
+              placeholder="you@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#8080A0] mb-1.5 uppercase tracking-wider">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              className="input-base"
+              placeholder="••••••••"
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-[#E24B4A] hover:bg-[#d03d3c] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
-        >
-          {loading ? "Logging in…" : "Log in"}
-        </button>
-      </form>
+          <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 mt-1">
+            {loading ? "Logging in…" : "Log in"}
+          </button>
+        </form>
 
-      <p className="mt-6 text-center text-sm text-[#555]">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-[#E24B4A] hover:underline">
-          Sign up
-        </Link>
-      </p>
+        <p className="mt-6 text-center text-sm text-[#8080A0]">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-[#E24B4A] hover:text-[#d03d3c] transition-colors">
+            Sign up
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4">
-      <Link
-        href="/"
-        className="text-xl font-bold text-white mb-10 tracking-tight"
-      >
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#07070D]">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#E24B4A]/4 blur-[120px] rounded-full" />
+      </div>
+      <Link href="/" className="text-xl font-bold text-white mb-10 tracking-tight relative">
         JungleCoach<span className="text-[#E24B4A]">.</span>
       </Link>
       <Suspense>

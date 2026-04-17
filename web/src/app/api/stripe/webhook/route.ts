@@ -26,9 +26,25 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.user_id;
   if (!userId || !session.customer || !session.subscription) return;
 
-  const subscription = await stripe.subscriptions.retrieve(
-    session.subscription as string
-  );
+  const newSubId = session.subscription as string;
+
+  // If the user already has a different subscription, cancel it immediately so
+  // they don't end up with two active subscriptions for the same customer.
+  const { data: existing } = await supabase
+    .from("subscriptions")
+    .select("stripe_subscription_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing?.stripe_subscription_id && existing.stripe_subscription_id !== newSubId) {
+    try {
+      await stripe.subscriptions.cancel(existing.stripe_subscription_id);
+    } catch {
+      // Old sub may already be cancelled — safe to ignore
+    }
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(newSubId);
   const priceId = subscription.items.data[0]?.price.id ?? "";
   const plan = planFromPriceId(priceId);
 
@@ -39,9 +55,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     {
       user_id: userId,
       stripe_customer_id: session.customer as string,
-      stripe_subscription_id: session.subscription as string,
+      stripe_subscription_id: newSubId,
       plan,
       status: "active",
+      cancel_at_period_end: false,
       ...(periodEnd ? { current_period_end: new Date(periodEnd * 1000).toISOString() } : {}),
       updated_at: new Date().toISOString(),
     },
@@ -54,15 +71,28 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const priceId = subscription.items.data[0]?.price.id ?? "";
   const plan = planFromPriceId(priceId);
 
-  // current_period_end moved off the top-level object in newer Stripe API versions
-  const periodEnd =
-    (subscription as unknown as { current_period_end?: number }).current_period_end;
+  const sub = subscription as unknown as {
+    current_period_end?: number;
+    cancel_at_period_end?: boolean;
+  };
+  const periodEnd = sub.current_period_end;
+
+  // cancel_at_period_end=true means user cancelled but still has access until period end
+  let status: string;
+  if (sub.cancel_at_period_end) {
+    status = "cancelling";
+  } else if (subscription.status === "active") {
+    status = "active";
+  } else {
+    status = subscription.status;
+  }
 
   await supabase
     .from("subscriptions")
     .update({
       plan,
-      status: subscription.status === "active" ? "active" : subscription.status,
+      status,
+      cancel_at_period_end: sub.cancel_at_period_end ?? false,
       ...(periodEnd ? { current_period_end: new Date(periodEnd * 1000).toISOString() } : {}),
       updated_at: new Date().toISOString(),
     })

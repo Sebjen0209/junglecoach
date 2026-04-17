@@ -40,47 +40,41 @@ export default async function HistoryDetailPage({ params }: PageProps) {
   const badCount = analysis.moments.filter((m) => !m.was_good_decision).length;
 
   return (
-    <div className="space-y-8">
-      {/* Back */}
+    <div className="space-y-6">
       <Link
         href="/dashboard/history"
-        className="inline-flex items-center gap-1.5 text-sm text-[#555] hover:text-white transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-[#46465C] hover:text-white transition-colors"
       >
         ← Back to history
       </Link>
 
       {/* Header */}
-      <div className="bg-[#13131A] border border-[#1E1E2A] rounded-xl p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div>
-            <p className="text-xs text-[#555] font-medium uppercase tracking-widest mb-1">
-              Jungler
-            </p>
-            <h1 className="text-2xl font-bold text-white">
-              {analysis.jungler_champion}
-            </h1>
-            <p className="text-xs text-[#444] font-mono mt-1">{matchId}</p>
+            <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-2">Jungler</p>
+            <h1 className="text-2xl font-bold text-white">{analysis.jungler_champion}</h1>
+            <p className="text-xs text-[#46465C] font-mono mt-1">{matchId}</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Stat label="Ganks" value={analysis.gank_count} />
             <Stat label="Objectives" value={analysis.objective_count} />
             <Stat label="Issues" value={analysis.pathing_issue_count} accent />
           </div>
         </div>
 
-        {/* Score bar */}
-        <div className="mt-5 pt-5 border-t border-[#1E1E2A] flex items-center gap-4">
+        <div className="mt-5 pt-5 border-t border-[#1C1C2A] flex flex-wrap items-center gap-5">
           <div className="flex items-center gap-2 text-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <span className="text-green-400 font-medium">{goodCount}</span>
-            <span className="text-[#444]">good decisions</span>
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-green-400 font-semibold">{goodCount}</span>
+            <span className="text-[#46465C]">good decisions</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#E24B4A]" />
-            <span className="text-[#E24B4A] font-medium">{badCount}</span>
-            <span className="text-[#444]">missed opportunities</span>
+            <span className="w-2 h-2 rounded-full bg-[#E24B4A]" />
+            <span className="text-[#E24B4A] font-semibold">{badCount}</span>
+            <span className="text-[#46465C]">missed opportunities</span>
           </div>
-          <span className="text-[#333] text-xs ml-auto">
+          <span className="text-[#46465C] text-xs ml-auto">
             {new Date(analysis.analysed_at).toLocaleString("en-GB")}
           </span>
         </div>
@@ -88,12 +82,9 @@ export default async function HistoryDetailPage({ params }: PageProps) {
 
       {/* Timeline */}
       <div>
-        <h2 className="text-base font-bold text-white mb-6">
-          Coaching timeline
-        </h2>
-
+        <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-6">Coaching timeline</p>
         {analysis.moments.length === 0 ? (
-          <p className="text-sm text-[#444]">No moments recorded for this match.</p>
+          <p className="text-sm text-[#46465C]">No moments recorded for this match.</p>
         ) : (
           <div>
             {analysis.moments.map((moment, i) => (
@@ -116,13 +107,11 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="bg-[#0A0A0F] border border-[#1E1E2A] rounded-lg px-4 py-3 text-center min-w-[72px]">
-      <p
-        className={`text-xl font-bold ${accent ? "text-[#E24B4A]" : "text-white"}`}
-      >
+    <div className="bg-[#07070D] border border-[#1C1C2A] rounded-lg px-4 py-3 text-center min-w-[68px]">
+      <p className={`text-xl font-bold ${accent ? "text-[#E24B4A]" : "text-white"}`}>
         {value}
       </p>
-      <p className="text-xs text-[#444] mt-0.5">{label}</p>
+      <p className="text-[10px] text-[#46465C] mt-0.5 uppercase tracking-wider">{label}</p>
     </div>
   );
 }
