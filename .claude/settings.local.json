@@ -38,7 +38,9 @@
       "Bash(python -c \"from data.scraper_playwright import scrape; print\\(''scraper_playwright imports OK''\\)\")",
       "Bash(python -c \"from data.riot_api import fetch_profiles; print\\(''riot_api imports OK''\\)\")",
       "Bash(python:*)",
-      "Bash(grep -r:*)"
+      "Bash(grep -r:*)",
+      "Bash(git stash:*)",
+      "Bash(pip list:*)"
     ]
   }
 }
