@@ -5,9 +5,16 @@ const FETCH_TIMEOUT = 4000;
 const LANE_ORDER = ['top', 'mid', 'bot'];
 const LANE_LABELS = { top: 'TOP', mid: 'MID', bot: 'BOT' };
 
+// Phase → human-readable status message
+const PHASE_MESSAGES = {
+  idle:    'Open League of Legends to begin',
+  client:  'In client \u2014 enter a game',
+  loading: 'Game loading\u2026',
+  in_game: 'Analysing\u2026',
+};
+
 // ── State ────────────────────────────────────────────────────
 const expandedLanes = new Set();
-// Hold the last successful data so click-to-expand still works between polls
 let lastData = null;
 
 // ── DOM helpers ──────────────────────────────────────────────
@@ -16,7 +23,7 @@ const content = document.getElementById('content');
 function syncHeight() {
   const app = document.getElementById('app');
   const h = Math.ceil(app.getBoundingClientRect().height);
-  window.electronAPI.setHeight(h + 2); // +2 for border
+  window.electronAPI.setHeight(h + 2);
 }
 
 // ── Rendering ────────────────────────────────────────────────
@@ -64,7 +71,6 @@ function renderLanes(data) {
     <div class="hint">Click a lane to see reasoning</div>
   `;
 
-  // Attach click handlers after rendering
   content.querySelectorAll('.lane-card').forEach((card) => {
     card.addEventListener('click', () => {
       const lane = card.dataset.lane;
@@ -80,18 +86,14 @@ function renderLanes(data) {
   syncHeight();
 }
 
-function renderScanning() {
+// Render a phase-aware status message (no TAB instructions needed anymore —
+// the backend reads data via Riot's Live Client API automatically).
+function renderPhase(phase) {
+  const msg = PHASE_MESSAGES[phase] || 'Waiting\u2026';
+  const cls = phase === 'loading' ? ' loading' : '';
   content.innerHTML = `
-    <div class="status-msg">
-      <span class="ellipsis">Game detected &mdash; hold TAB to scan</span>
-    </div>`;
-  syncHeight();
-}
-
-function renderWaiting() {
-  content.innerHTML = `
-    <div class="status-msg">
-      <span class="ellipsis">Waiting for game</span>
+    <div class="status-msg${cls}">
+      <span class="ellipsis">${msg}</span>
     </div>`;
   syncHeight();
 }
@@ -100,7 +102,7 @@ function renderOffline() {
   content.innerHTML = `
     <div class="status-msg offline">
       Backend offline
-      <small>Run <code>python backend/main.py</code> to start</small>
+      <small>Run <code>python main.py</code> in <code>backend/</code></small>
     </div>`;
   syncHeight();
 }
@@ -116,13 +118,26 @@ async function fetchAnalysis() {
 
     if (data.game_detected && data.lanes) {
       renderLanes(data);
-    } else if (data.game_detected) {
-      renderScanning();
     } else {
-      renderWaiting();
+      // No lane data — fetch /status for a precise phase message.
+      fetchStatus();
     }
   } catch {
     renderOffline();
+  }
+}
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/status`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderPhase(data.lol_phase);
+  } catch {
+    // /status unreachable — fall back to a generic waiting message
+    renderPhase('idle');
   }
 }
 
