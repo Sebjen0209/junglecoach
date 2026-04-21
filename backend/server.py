@@ -4,10 +4,11 @@ Binds to 127.0.0.1:7429 only (never accessible from the network).
 Endpoints match the API contract in .claude/api-contract.md exactly.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -19,6 +20,7 @@ from capture.screen import CaptureLoop
 from config import settings
 from data.db import init_db, seed_power_spikes
 from data.riot_api import fetch_champion_id_map, fetch_profiles
+from data.updater import check_and_update
 from models import AnalysisResult, PlayerProfile, PostGameAnalysis
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,15 @@ async def lifespan(app: FastAPI):
 
     logger.info("JungleCoach backend starting up (v%s)", _VERSION)
     init_db()
+
+    # Check for a newer matchup DB from the cloud API before seeding power spikes.
+    # If updated, the new DB already contains up-to-date matchup rows; we then
+    # re-seed power spikes so phase ratings are consistent with the new patch.
+    updated = await asyncio.to_thread(check_and_update)
+    if updated:
+        logger.info("Matchup DB replaced — re-running DB init and power spike seed")
+        init_db()
+
     seed_power_spikes()
 
     _ai_client = AIClient()

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Riot API routing — platform for summoner lookups, region for Match-V5
     riot_platform: str = Field(default="euw1", alias="RIOT_PLATFORM")
     riot_region: str = Field(default="europe", alias="RIOT_REGION")
+    # Cloud API — used on startup to check for fresh matchup data.
+    # Leave empty to skip the auto-update check (e.g. for offline dev).
+    cloud_api_url: str = Field(default="", alias="CLOUD_API_URL")
 
     model_config = {"env_file": ".env", "populate_by_name": True}
 
