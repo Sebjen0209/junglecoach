@@ -68,11 +68,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt httpx
+        run: pip install httpx pydantic pydantic-settings python-dotenv
 
       - name: Run U.GG scraper
         working-directory: backend
