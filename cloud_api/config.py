@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
 
     # -------------------------------------------------------------------------
+    # Patch auto-update
+    # -------------------------------------------------------------------------
+    # Secret bearer token — must match the SCRAPER_SECRET in GitHub Actions secrets.
+    # The POST /data/versions endpoint rejects any request that doesn't carry this.
+    scraper_secret: str = Field(default="", alias="SCRAPER_SECRET")
+
+    # -------------------------------------------------------------------------
     # App
     # -------------------------------------------------------------------------
     environment: str = Field(default="production", alias="ENVIRONMENT")
