@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -13,35 +16,68 @@ interface AppShellProps {
 }
 
 export function AppShell({ user, children }: AppShellProps) {
+  const pathname = usePathname();
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#07070D]">
-      <nav className="border-b border-[#1C1C2A] px-6 bg-[#07070D]/95 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex items-center justify-between h-14">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-sm font-bold text-white tracking-tight">
-              JungleCoach<span className="text-[#E24B4A]">.</span>
-            </Link>
-            <div className="hidden sm:flex items-center">
-              {NAV_LINKS.map((link) => (
+    <div className="min-h-screen flex flex-col" style={{ background: "#080818" }}>
+
+      {/* Aurora layer */}
+      <div className="fixed inset-0 pointer-events-none z-0" aria-hidden>
+        {/* Deep indigo base */}
+        <div style={{ position: "absolute", inset: 0, background: "#080818" }} />
+        {/* Teal top-left bloom */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "radial-gradient(ellipse 80% 55% at 0% 0%, rgba(0,60,120,0.45) 0%, transparent 65%)",
+        }} />
+        {/* Violet bottom-right bloom */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "radial-gradient(ellipse 70% 60% at 100% 100%, rgba(60,10,100,0.4) 0%, transparent 65%)",
+        }} />
+        {/* Subtle cyan midpoint */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "radial-gradient(ellipse 50% 40% at 60% 40%, rgba(0,229,255,0.04) 0%, transparent 70%)",
+        }} />
+      </div>
+
+      {/* Nav — identical structure to landing page Nav */}
+      <nav className="sticky top-0 z-50 px-6 py-4 transition-all duration-300 border-b border-[#1a1a4a] bg-[#080818]/90 backdrop-blur-2xl">
+        <div className="max-w-7xl mx-auto grid grid-cols-3 items-center">
+          {/* Left — logo */}
+          <Link
+            href="/"
+            className="arcane-heading text-lg font-bold tracking-wider justify-self-start"
+            style={{ color: "#f0c040", textShadow: "0 0 20px rgba(240,192,64,0.5)" }}
+          >
+            JungleCoach
+          </Link>
+
+          {/* Centre — nav links */}
+          <div className="hidden md:flex items-center justify-center gap-8">
+            {NAV_LINKS.map((link) => {
+              const isActive = pathname === link.href ||
+                (link.href !== "/dashboard" && pathname.startsWith(link.href));
+              return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm text-[#8080A0] hover:text-white px-3 py-1.5 rounded-md hover:bg-[#0E0E18] transition-colors"
+                  className="sub-heading text-xs tracking-widest transition-colors hover:text-white"
+                  style={{ color: isActive ? "#00e5ff" : "#c5cae9" }}
                 >
                   {link.label}
                 </Link>
-              ))}
-            </div>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-[#46465C] hidden sm:block truncate max-w-[180px]">
-              {user.email}
-            </span>
-            <div className="w-px h-4 bg-[#1C1C2A] hidden sm:block" />
+
+          {/* Right — sign out */}
+          <div className="flex items-center justify-end gap-3">
             <form action="/api/auth/signout" method="POST">
               <button
                 type="submit"
-                className="text-xs text-[#8080A0] hover:text-white transition-colors"
+                className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest"
               >
                 Sign out
               </button>
@@ -50,7 +86,7 @@ export function AppShell({ user, children }: AppShellProps) {
         </div>
       </nav>
 
-      <main className="flex-1 px-6 py-8 max-w-6xl mx-auto w-full">
+      <main className="relative z-10 flex-1 px-6 py-10 max-w-7xl mx-auto w-full">
         {children}
       </main>
     </div>

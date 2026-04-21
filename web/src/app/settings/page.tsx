@@ -4,24 +4,30 @@ import { AppShell } from "@/components/AppShell";
 
 export default async function SettingsPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   return (
     <AppShell user={user}>
       <div className="max-w-2xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-          <p className="text-sm text-[#8080A0] mt-1">Manage your account details</p>
+          <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Settings</h1>
+          <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>Manage your account details</p>
         </div>
 
         {/* Account info */}
-        <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl overflow-hidden">
-          <div className="px-6 py-5 border-b border-[#1C1C2A]">
-            <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-4">Account</p>
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{
+            background: "rgba(13,13,43,0.7)",
+            borderColor: "rgba(26,26,74,0.8)",
+            backdropFilter: "blur(16px)",
+          }}
+        >
+          <div className="px-6 py-5 border-b" style={{ borderColor: "rgba(26,26,74,0.8)" }}>
+            <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-5" style={{ color: "#7986cb" }}>
+              ACCOUNT
+            </p>
             <div className="space-y-4">
               <Row label="Email" value={user.email ?? "—"} />
               <Row label="User ID" value={user.id} mono />
@@ -35,22 +41,34 @@ export default async function SettingsPage() {
           </div>
 
           <div className="px-6 py-5">
-            <p className="text-[10px] font-bold text-[#46465C] uppercase tracking-[0.15em] mb-4">Password</p>
+            <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-4" style={{ color: "#7986cb" }}>
+              PASSWORD
+            </p>
             <ChangePasswordForm />
           </div>
         </div>
 
         {/* Danger zone */}
-        <div className="bg-[#0E0E18] border border-red-900/20 rounded-xl p-6">
-          <p className="text-[10px] font-bold text-red-500/60 uppercase tracking-[0.15em] mb-3">Danger zone</p>
-          <p className="text-sm text-[#8080A0] mb-4 leading-relaxed">
+        <div
+          className="rounded-xl p-6 border"
+          style={{
+            background: "rgba(13,13,43,0.7)",
+            borderColor: "rgba(255,51,102,0.15)",
+            backdropFilter: "blur(16px)",
+          }}
+        >
+          <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-3" style={{ color: "rgba(255,51,102,0.6)" }}>
+            DANGER ZONE
+          </p>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: "#c5cae9" }}>
             Deleting your account is permanent and cannot be undone. All your data will be removed.
           </p>
           <button
             disabled
-            className="text-sm text-red-500/50 border border-red-900/20 px-4 py-2 rounded-lg cursor-not-allowed"
+            className="sub-heading text-xs tracking-widest px-4 py-2 rounded-lg border cursor-not-allowed opacity-50"
+            style={{ color: "#ff3366", borderColor: "rgba(255,51,102,0.2)" }}
           >
-            Delete account
+            DELETE ACCOUNT
           </button>
         </div>
       </div>
@@ -61,8 +79,11 @@ export default async function SettingsPage() {
 function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-[#8080A0] shrink-0">{label}</span>
-      <span className={`text-sm text-white truncate ${mono ? "font-mono text-xs text-[#46465C]" : ""}`}>
+      <span className="text-sm shrink-0" style={{ color: "#c5cae9" }}>{label}</span>
+      <span
+        className="text-sm truncate"
+        style={{ color: mono ? "#7986cb" : "#f0f2ff", fontFamily: mono ? "monospace" : "inherit", fontSize: mono ? "0.7rem" : undefined }}
+      >
         {value}
       </span>
     </div>
@@ -84,11 +105,12 @@ function ChangePasswordForm() {
         <button
           type="button"
           disabled
-          className="text-sm bg-[#141422] border border-[#1C1C2A] text-[#46465C] px-4 py-2 rounded-lg cursor-not-allowed"
+          className="sub-heading text-xs tracking-widest px-4 py-2 rounded-lg border cursor-not-allowed opacity-50"
+          style={{ color: "#c5cae9", borderColor: "rgba(26,26,74,0.8)" }}
         >
-          Update password
+          UPDATE PASSWORD
         </button>
-        <p className="text-xs text-[#46465C]">Coming soon</p>
+        <p className="text-xs" style={{ color: "#7986cb" }}>Coming soon</p>
       </div>
     </div>
   );

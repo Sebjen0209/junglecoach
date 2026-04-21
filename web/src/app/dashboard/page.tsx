@@ -3,18 +3,16 @@ import { SubscriptionStatus } from "@/components/SubscriptionStatus";
 import Link from "next/link";
 
 const DOWNLOAD_STEPS = [
-  { n: 1, text: "Download the JungleCoach desktop app" },
-  { n: 2, text: "Install and launch it" },
-  { n: 3, text: "Log in via the app — it will open this browser window" },
-  { n: 4, text: "Open a League of Legends game and press Tab" },
+  { n: "01", text: "Download the JungleCoach desktop app" },
+  { n: "02", text: "Install and launch it" },
+  { n: "03", text: "Log in via the app — it will open this browser window" },
+  { n: "04", text: "Open a League of Legends game and press Tab" },
 ];
 
 export default async function DashboardPage() {
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const { data: subscription } = await supabase
     .from("subscriptions")
@@ -31,54 +29,69 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-[#8080A0] mt-1">
+        <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Dashboard</h1>
+        <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>
           Welcome back, {user?.email}
         </p>
       </div>
 
       {/* Plan banner */}
-      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div
+        className="rounded-xl p-6 border flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        style={{
+          background: "rgba(13,13,43,0.7)",
+          borderColor: isPremium ? "rgba(240,192,64,0.25)" : "rgba(26,26,74,0.8)",
+          backdropFilter: "blur(16px)",
+          boxShadow: isPremium ? "0 0 40px rgba(240,192,64,0.06)" : "none",
+        }}
+      >
         <div>
-          <p className="text-[10px] text-[#46465C] font-bold uppercase tracking-[0.15em] mb-3">
-            Current plan
+          <p className="sub-heading text-[10px] tracking-[0.2em] mb-3" style={{ color: "#7986cb" }}>
+            CURRENT PLAN
           </p>
-          <SubscriptionStatus
-            plan={plan}
-            status={status}
-            currentPeriodEnd={periodEnd}
-          />
+          <SubscriptionStatus plan={plan} status={status} currentPeriodEnd={periodEnd} />
         </div>
         {!isPremium && (
-          <Link
-            href="/billing"
-            className="shrink-0 bg-[#E24B4A] hover:bg-[#d03d3c] text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
-          >
+          <Link href="/billing" className="btn-arcane shrink-0 text-xs">
             Upgrade to Premium
           </Link>
         )}
       </div>
 
       {/* Get started */}
-      <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-xl p-6">
-        <h2 className="text-sm font-bold text-white mb-5 uppercase tracking-wider">
-          Get started in 4 steps
+      <div
+        className="rounded-xl p-6 border"
+        style={{
+          background: "rgba(13,13,43,0.7)",
+          borderColor: "rgba(26,26,74,0.8)",
+          backdropFilter: "blur(16px)",
+        }}
+      >
+        <h2 className="sub-heading text-xs font-bold tracking-[0.2em] mb-6" style={{ color: "#f0f2ff" }}>
+          GET STARTED IN 4 STEPS
         </h2>
-        <ol className="space-y-4">
-          {DOWNLOAD_STEPS.map((step) => (
+        <ol className="space-y-5">
+          {DOWNLOAD_STEPS.map((step, i) => (
             <li key={step.n} className="flex items-start gap-4">
-              <span className="shrink-0 w-6 h-6 rounded-full bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-[10px] font-bold flex items-center justify-center mt-0.5">
+              <span
+                className="sub-heading shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold border"
+                style={{
+                  background: "rgba(240,192,64,0.08)",
+                  borderColor: "rgba(240,192,64,0.25)",
+                  color: "#f0c040",
+                }}
+              >
                 {step.n}
               </span>
-              <span className="text-sm text-[#8080A0] leading-relaxed">{step.text}</span>
+              <span className="text-sm leading-relaxed pt-1.5" style={{ color: "#c5cae9" }}>{step.text}</span>
             </li>
           ))}
         </ol>
         <a
           href="#"
-          className="inline-flex items-center gap-2 mt-6 bg-[#141422] hover:bg-[#1C1C2E] border border-[#1C1C2A] hover:border-[#2A2A3A] text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 mt-8 btn-arcane-ghost text-xs"
         >
-          ⬇ Download for Windows
+          Download for Windows
         </a>
       </div>
     </div>
