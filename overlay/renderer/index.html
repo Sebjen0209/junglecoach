@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://localhost:7429"
+    content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://localhost:7429 https://qoxflvsmytpkbcxxpaxw.supabase.co"
   />
   <title>JungleCoach</title>
   <link rel="stylesheet" href="overlay.css" />
@@ -16,6 +16,7 @@
     <header class="header">
       <span class="logo">JungleCoach</span>
       <div class="window-controls">
+        <button id="btn-account" class="ctrl-btn account" title="Sign out" style="display:none"></button>
         <button id="btn-minimize" class="ctrl-btn" title="Minimise">&#8212;</button>
         <button id="btn-close" class="ctrl-btn close" title="Close">&#x2715;</button>
       </div>
