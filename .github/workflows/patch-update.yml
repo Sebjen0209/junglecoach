@@ -1,30 +1,37 @@
 name: Patch Auto-Update
 
-# Runs every 2 hours to check if Riot has released a new LoL patch.
-# If a new patch is detected, scrapes U.GG for fresh matchup data,
-# uploads the database to Supabase Storage, and notifies the cloud API.
-# Can also be triggered manually from the Actions tab.
+# Job 1 (automated): checks every 2 hours if a new LoL patch is live.
+# Fails visibly when a new patch is detected — that's your signal to scrape.
+#
+# Job 2 (manual only): uploads a pre-built matchups.db to Supabase Storage
+# and notifies the cloud API. Run this after scraping locally:
+#
+#   cd backend
+#   python -m data.scraper --patch=X.X
+#   cd ..
+#   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... CLOUD_API_URL=... SCRAPER_SECRET=... \
+#     python scripts/upload_matchups.py --patch X.X --db backend/data/junglecoach.db
+#
+# NOTE: U.GG blocks GitHub Actions IPs via Cloudflare, so scraping must be
+# done locally on a residential IP. Only the upload step runs in CI.
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours
+    - cron: "0 */2 * * *"   # every 2 hours — patch check only
   workflow_dispatch:
     inputs:
-      force_patch:
-        description: "Force-scrape a specific patch (e.g. 16.9). Leave empty to auto-detect."
+      upload_patch:
+        description: "Upload a pre-scraped patch (e.g. 16.9). Triggers Job 2."
         required: false
         default: ""
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1: Check whether a new patch is available
+  # Job 1: Check whether a new patch is available (automated)
   # ---------------------------------------------------------------------------
   check-patch:
     name: Check for new patch
     runs-on: ubuntu-latest
-    outputs:
-      new_patch_available: ${{ steps.check.outputs.new_patch_available }}
-      latest_patch: ${{ steps.check.outputs.latest_patch }}
 
     steps:
       - name: Checkout
@@ -35,84 +42,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install check script dependencies
+      - name: Install dependencies
         run: pip install httpx
 
       - name: Check patch version
-        id: check
         env:
           CLOUD_API_URL: ${{ secrets.CLOUD_API_URL }}
+        run: python scripts/check_patch.py
+
+      - name: New patch detected — action required
+        if: failure()
         run: |
-          if [ -n "${{ github.event.inputs.force_patch }}" ]; then
-            echo "Force patch override: ${{ github.event.inputs.force_patch }}"
-            echo "new_patch_available=true" >> "$GITHUB_OUTPUT"
-            echo "latest_patch=${{ github.event.inputs.force_patch }}" >> "$GITHUB_OUTPUT"
-          else
-            python scripts/check_patch.py
-          fi
+          echo "::warning::A new LoL patch is available. Run the scraper locally and trigger the upload workflow."
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Scrape, upload, and notify (only runs when new patch detected)
-  # ---------------------------------------------------------------------------
-  scrape-and-upload:
-    name: Scrape patch ${{ needs.check-patch.outputs.latest_patch }}
-    needs: check-patch
-    if: needs.check-patch.outputs.new_patch_available == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install backend dependencies
-        run: pip install httpx pydantic pydantic-settings python-dotenv
-
-      - name: Run U.GG scraper
-        working-directory: backend
-        env:
-          DB_PATH: ./data/junglecoach.db
-          CURRENT_PATCH: ${{ needs.check-patch.outputs.latest_patch }}
-          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-        run: |
-          mkdir -p data
-          python -m data.scraper --patch=${{ needs.check-patch.outputs.latest_patch }}
-
-      - name: Verify scrape output
-        working-directory: backend
-        run: |
-          python - <<'EOF'
-          import sqlite3, sys
-          conn = sqlite3.connect("data/junglecoach.db")
-          count = conn.execute(
-              "SELECT COUNT(*) FROM matchups WHERE patch = ?",
-              ("${{ needs.check-patch.outputs.latest_patch }}",)
-          ).fetchone()[0]
-          conn.close()
-          print(f"Matchup rows for patch ${{ needs.check-patch.outputs.latest_patch }}: {count}")
-          if count < 1000:
-              print("ERROR: row count is suspiciously low — scrape may have failed", file=sys.stderr)
-              sys.exit(1)
-          EOF
-
-      - name: Upload DB to Supabase Storage and notify cloud API
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          CLOUD_API_URL: ${{ secrets.CLOUD_API_URL }}
-          SCRAPER_SECRET: ${{ secrets.SCRAPER_SECRET }}
-        run: |
-          python scripts/upload_matchups.py \
-            --patch ${{ needs.check-patch.outputs.latest_patch }} \
-            --db backend/data/junglecoach.db
-
-      - name: Summary
-        run: |
-          echo "### Patch Update Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Patch:** \`${{ needs.check-patch.outputs.latest_patch }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** Data uploaded and cloud API notified." >> $GITHUB_STEP_SUMMARY
