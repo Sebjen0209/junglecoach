@@ -33,6 +33,7 @@ Guidelines:
 - Focus on the WHY behind good and bad decisions.
 - Keep each explanation to 2-3 sentences maximum.
 - For bad decisions, always give a concrete alternative.
+- Objective trades: if the enemy takes an objective and the jungler couldn't safely contest it, check whether alternative objectives (Void Grubs, Rift Herald, Dragon, Baron) were available on the other side of the map. If so, suggest taking them as a trade — this is often the correct play when behind or when the enemy has better positioning around the contested objective.
 - Output ONLY valid JSON — no markdown, no text outside the JSON array.\
 """
 
@@ -95,9 +96,18 @@ def _build_event_list(
     """Merge and sort all events into a flat numbered list for the prompt."""
     events: list[dict[str, Any]] = []
 
+    _LANE_LOCATION = {
+        "top": "in top lane",
+        "mid": "in mid lane",
+        "bot": "in bot lane",
+        "jungle/top": "in the top side jungle (near top lane)",
+        "jungle/bot": "in the bot side jungle (near bot lane)",
+        "jungle": "in the jungle",
+    }
+
     for g in ganks:
         victim = g.victim_champion or "an enemy"
-        location = "in the jungle" if g.lane == "jungle" else f"in {g.lane} lane"
+        location = _LANE_LOCATION.get(g.lane, f"in {g.lane}")
 
         if g.was_jungler_killer:
             action = f"{champion_name} got the kill on {victim} {location}."
@@ -120,16 +130,39 @@ def _build_event_list(
 
     for obj in objectives:
         name = _OBJECTIVE_DISPLAY.get(obj.objective_type, obj.objective_type)
-        secured = "secured by ally team" if obj.secured_by_ally else "taken by enemy team"
-        vision = "ward coverage existed" if obj.had_vision_before else "no ward coverage in the 60s before"
         spawn_note = " (first spawn)" if obj.is_first_spawn else " (respawn)"
+        vision = "ward coverage existed" if obj.had_vision_before else "no ward coverage in the 60s before"
 
-        if obj.jungler_was_dead:
-            proximity = "dead at this time"
-        elif obj.was_near_pit:
-            proximity = "near the pit"
+        if obj.jungler_killed_objective:
+            secured = "secured by the jungler (solo kill)"
+            proximity = "at the objective pit (jungler soloed it)"
+        elif obj.secured_by_ally:
+            secured = "secured by the ally team (jungler assisted)"
+            if obj.jungler_was_dead:
+                proximity = "dead at this time"
+            elif obj.was_near_pit:
+                proximity = "near the pit"
+            else:
+                proximity = f"{int(obj.jungler_distance_from_pit)} map units away from the pit"
         else:
-            proximity = f"{int(obj.jungler_distance_from_pit)} map units away from the pit"
+            secured = "taken by the enemy team"
+            if obj.jungler_was_dead:
+                proximity = "dead at this time"
+            elif obj.was_near_pit:
+                proximity = "near the pit but couldn't contest"
+            else:
+                proximity = f"{int(obj.jungler_distance_from_pit)} map units away from the pit"
+
+        trade_note = ""
+        if obj.is_trade and obj.trade_with:
+            other_name = _OBJECTIVE_DISPLAY.get(obj.trade_with, obj.trade_with)
+            if obj.secured_by_ally or obj.jungler_killed_objective:
+                trade_note = f" (objective trade — enemy team took {other_name} at the same time)"
+            else:
+                trade_note = f" (objective trade — ally team took {other_name} at the same time)"
+        elif not (obj.secured_by_ally or obj.jungler_killed_objective) and obj.available_for_trade:
+            options = ", ".join(obj.available_for_trade)
+            trade_note = f" Alternative objectives available to trade instead: {options}."
 
         events.append({
             "index": len(events),
@@ -137,13 +170,17 @@ def _build_event_list(
             "type": "objective",
             "description": (
                 f"{name}{spawn_note} was {secured}. "
-                f"Jungler was {proximity}. {vision}."
+                f"Jungler was {proximity}. {vision}.{trade_note}"
             ),
             "secured_by_ally": obj.secured_by_ally,
+            "jungler_killed_objective": obj.jungler_killed_objective,
             "jungler_was_dead": obj.jungler_was_dead,
             "jungler_was_near": obj.was_near_pit,
             "had_vision": obj.had_vision_before,
             "is_first_spawn": obj.is_first_spawn,
+            "is_trade": obj.is_trade,
+            "trade_with": obj.trade_with,
+            "available_for_trade": obj.available_for_trade,
         })
 
     for p in pathing:
