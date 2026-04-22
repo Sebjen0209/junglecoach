@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import httpx
+import requests as _requests
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -63,18 +64,20 @@ def upload_to_storage(db_path: Path, patch: str) -> str:
     upload_url = f"{supabase_url}/storage/v1/object/{_BUCKET}/{object_path}"
     public_url = f"{supabase_url}/storage/v1/object/public/{_BUCKET}/{object_path}"
 
-    print(f"Uploading {db_path} ({db_path.stat().st_size / 1024 / 1024:.1f} MB) → {upload_url}")
+    file_size = db_path.stat().st_size
+    print(f"Uploading {db_path} ({file_size / 1024 / 1024:.1f} MB) → {upload_url}")
 
     with db_path.open("rb") as f:
-        resp = httpx.put(
+        resp = _requests.put(
             upload_url,
-            content=f,
+            data=f,
             headers={
                 "Authorization": f"Bearer {service_role_key}",
                 "Content-Type": "application/octet-stream",
+                "Content-Length": str(file_size),
                 "x-upsert": "true",
             },
-            timeout=_TIMEOUT,
+            timeout=300,
         )
 
     if resp.status_code not in (200, 201):
