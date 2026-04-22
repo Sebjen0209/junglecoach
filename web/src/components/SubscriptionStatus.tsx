@@ -11,11 +11,11 @@ const PLAN_LABELS: Record<string, string> = {
   pro: "Pro",
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  active: "bg-green-500/10 text-green-400 border-green-500/20",
-  cancelling: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  cancelled: "bg-[#1E1E2A] text-[#555] border-[#2A2A3A]",
-  past_due: "bg-red-500/10 text-red-400 border-red-500/20",
+const STATUS_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
+  active:     { bg: "rgba(0,229,255,0.08)",  color: "#00e5ff", border: "rgba(0,229,255,0.25)",  label: "Active" },
+  cancelling: { bg: "rgba(240,192,64,0.08)", color: "#f0c040", border: "rgba(240,192,64,0.25)", label: "Cancels at period end" },
+  cancelled:  { bg: "rgba(26,26,74,0.5)",    color: "#7986cb", border: "rgba(26,26,74,0.8)",    label: "Cancelled" },
+  past_due:   { bg: "rgba(255,51,102,0.08)", color: "#ff3366", border: "rgba(255,51,102,0.25)", label: "Past Due" },
 };
 
 export function SubscriptionStatus({
@@ -26,48 +26,43 @@ export function SubscriptionStatus({
 }: SubscriptionStatusProps) {
   const label = PLAN_LABELS[plan] ?? plan;
   const effectiveStatus = cancelAtPeriodEnd ? "cancelling" : status;
-  const statusStyle = STATUS_STYLES[effectiveStatus] ?? STATUS_STYLES.active;
+  const s = STATUS_STYLES[effectiveStatus] ?? STATUS_STYLES.active;
   const periodDate = currentPeriodEnd
     ? new Date(currentPeriodEnd).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
+        day: "numeric", month: "long", year: "numeric",
       })
     : null;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <span className="text-lg font-bold text-white">{label}</span>
+        <span className="arcane-heading text-xl font-bold" style={{ color: "#f0f2ff" }}>{label}</span>
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${statusStyle}`}
+          className="sub-heading inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-widest border"
+          style={{ background: s.bg, color: s.color, borderColor: s.border }}
         >
-          {effectiveStatus === "active"
-            ? "Active"
-            : effectiveStatus === "cancelling"
-            ? "Cancels at period end"
-            : effectiveStatus === "cancelled"
-            ? "Cancelled"
-            : "Past Due"}
+          {s.label.toUpperCase()}
         </span>
       </div>
 
       {effectiveStatus === "active" && periodDate && (
-        <p className="text-xs text-[#555]">Renews on {periodDate}</p>
-      )}
-
-      {effectiveStatus === "cancelling" && periodDate && (
-        <p className="text-xs text-yellow-500/70">
-          Access until {periodDate} — your subscription will not renew.
+        <p className="text-xs" style={{ color: "#c5cae9" }}>
+          Next billing date: <span style={{ color: "#f0f2ff" }}>{periodDate}</span>
         </p>
       )}
-
-      {effectiveStatus === "cancelled" && (
-        <p className="text-xs text-[#555]">Your subscription has ended.</p>
+      {effectiveStatus === "active" && !periodDate && (
+        <p className="text-xs" style={{ color: "#7986cb" }}>Free plan — no billing, upgrade anytime.</p>
       )}
-
+      {effectiveStatus === "cancelling" && periodDate && (
+        <p className="text-xs" style={{ color: "rgba(240,192,64,0.7)" }}>
+          Access until <span style={{ color: "#f0c040" }}>{periodDate}</span> — will not renew.
+        </p>
+      )}
+      {effectiveStatus === "cancelled" && (
+        <p className="text-xs" style={{ color: "#7986cb" }}>Subscription ended — upgrade to restore access.</p>
+      )}
       {status === "past_due" && (
-        <p className="text-xs text-red-400/80">
+        <p className="text-xs" style={{ color: "rgba(255,51,102,0.8)" }}>
           Payment failed — update your payment method to keep access.
         </p>
       )}

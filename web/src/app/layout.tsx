@@ -1,5 +1,27 @@
 import type { Metadata } from "next";
+import { Cinzel, Rajdhani, Barlow } from "next/font/google";
 import "./globals.css";
+
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "900"],
+  variable: "--font-cinzel",
+  display: "swap",
+});
+
+const rajdhani = Rajdhani({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-rajdhani",
+  display: "swap",
+});
+
+const barlow = Barlow({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-barlow",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "JungleCoach — Real-time LoL Gank Assistant",
@@ -14,8 +36,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-[#0A0A0F] text-[#E5E5E5] antialiased">
+    <html lang="en" className={`${cinzel.variable} ${rajdhani.variable} ${barlow.variable}`}>
+      <body className="min-h-screen antialiased">
         {children}
       </body>
     </html>
