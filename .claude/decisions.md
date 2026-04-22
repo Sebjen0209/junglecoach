@@ -174,4 +174,51 @@ contract or overlay.
 
 ---
 
+## 2026-04-21 — U.GG scraper is local-only; CI only checks for new patches
+
+**Decision**: The U.GG scraper (`data/scraper.py`) and the upload script (`scripts/upload_local.sh`) are run manually on a developer machine after each patch. The GitHub Actions workflow (`check_patch.yml`) only *detects* new patches and fails visibly as an alert — it never scrapes or uploads.
+
+**Why**: U.GG blocks GitHub Actions runner IPs via Cloudflare. Any attempt to scrape from CI produces a 403. Running it locally also lets us validate the scraped data before uploading to production.
+
+**Alternatives considered**: Rotating proxies or a self-hosted runner (too much ops overhead for a 2-week scrape cadence).
+
+**Impact**: Person 1 — patch updates are a manual 2-step local process: `python -m data.scraper --patch=X.X` then `bash scripts/upload_local.sh X.X`. `upload_local.sh` is gitignored (contains credentials). Person 2 — no change.
+
+---
+
+## 2026-04-21 — Use `requests` (not `httpx`) for Supabase Storage uploads
+
+**Decision**: `scripts/upload_matchups.py` uses the `requests` library for the multipart upload to Supabase Storage, not `httpx`.
+
+**Why**: `httpx` defaults to HTTP/2, which caused connection errors with Supabase Storage during upload testing. Switching to `requests` (HTTP/1.1) resolved the issue immediately.
+
+**Alternatives considered**: Forcing `httpx` to HTTP/1.1 via `http2=False` (viable but adds a config trap for future maintainers; `requests` is simpler and has no HTTP/2 ambiguity).
+
+**Impact**: Person 1 — `requests` must be in `requirements.txt` for the scripts environment. Do not refactor the upload script to use `httpx` without testing HTTP/2 compatibility first.
+
+---
+
+## 2026-04-22 — Move Claude API call to Railway; no secrets on the user's machine
+
+**Decision**: The Anthropic API call is made by the Railway cloud API (`POST /analysis/reasons`), not the local backend. The local backend POSTs the `GameState` to Railway and receives reasoning strings back. The `ANTHROPIC_API_KEY` is removed from `backend/config.py` and the local `.env` entirely.
+
+**Why**: Any secret stored on an end user's machine can be extracted — PyInstaller `.exe` files can be decompiled, `.env` files can be read. There is no safe way to ship a billing API key to hardware you don't control. Moving the call to Railway means the key lives only in Railway environment variables, which only the team can access. A compromised key can be rotated in one place with no installer update required.
+
+**What changed**:
+- `cloud_api/routers/analysis.py` (new) — `POST /analysis/reasons`: validates Supabase JWT, checks subscription tier, returns null reasons for free users, calls Claude for premium/pro.
+- `backend/analysis/ai_client.py` — replaced Anthropic client with `httpx.post()` to Railway. Caching logic (45s min interval, state-diff check) is unchanged.
+- `backend/analysis/suggestion.py` — `analyse()` accepts `jwt` param, passes it to `ai_client.get_reasons()`.
+- `backend/server.py` — extracts `Authorization: Bearer` header from overlay requests, forwards JWT to `analyse()`.
+- `backend/config.py` — removed `ANTHROPIC_API_KEY` and `AI_MODEL` fields.
+- `backend/models.py` — `LaneSuggestion.reason` changed to `str | None` (free users get null).
+- `overlay/renderer/overlay.js` — `fetchAnalysis()` now passes `Authorization: Bearer <jwt>` header to the local backend.
+
+**Alternatives considered**: Fetching a short-lived proxy token from Railway on app startup (complex, still lands a token on disk). User-supplied API key (too much friction, kills free tier).
+
+**Impact**:
+- Person 1 — remove `ANTHROPIC_API_KEY` from `backend/.env`. Add `CLOUD_API_URL` if not already present. Railway already has the key.
+- Person 2 — no overlay or web changes required. The overlay `reason` field can now be null; the existing null-check in `renderLanes()` already handles this correctly.
+
+---
+
 _Add new decisions below this line_

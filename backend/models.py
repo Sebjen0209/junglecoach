@@ -50,7 +50,7 @@ class LaneSuggestion(BaseModel):
     enemy_champion: str
     matchup_winrate: float
     priority: Literal["high", "medium", "low"]
-    reason: str
+    reason: str | None = None
     score: float
 
 
