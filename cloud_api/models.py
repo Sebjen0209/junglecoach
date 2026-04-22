@@ -6,6 +6,15 @@ Only post-game models live here — live-game models stay in backend/models.py.
 from pydantic import BaseModel
 
 
+class DataVersion(BaseModel):
+    """Response for GET /data/latest — tells desktop clients what patch is current."""
+
+    patch: str
+    db_url: str
+    row_count: int
+    scraped_at: str
+
+
 class CoachingMoment(BaseModel):
     """A single timestamped coaching feedback item."""
 

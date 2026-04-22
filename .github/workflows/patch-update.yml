@@ -1,0 +1,57 @@
+name: Patch Auto-Update
+
+# Job 1 (automated): checks every 2 hours if a new LoL patch is live.
+# Fails visibly when a new patch is detected — that's your signal to scrape.
+#
+# Job 2 (manual only): uploads a pre-built matchups.db to Supabase Storage
+# and notifies the cloud API. Run this after scraping locally:
+#
+#   cd backend
+#   python -m data.scraper --patch=X.X
+#   cd ..
+#   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... CLOUD_API_URL=... SCRAPER_SECRET=... \
+#     python scripts/upload_matchups.py --patch X.X --db backend/data/junglecoach.db
+#
+# NOTE: U.GG blocks GitHub Actions IPs via Cloudflare, so scraping must be
+# done locally on a residential IP. Only the upload step runs in CI.
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours — patch check only
+  workflow_dispatch:
+    inputs:
+      upload_patch:
+        description: "Upload a pre-scraped patch (e.g. 16.9). Triggers Job 2."
+        required: false
+        default: ""
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Check whether a new patch is available (automated)
+  # ---------------------------------------------------------------------------
+  check-patch:
+    name: Check for new patch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Check patch version
+        env:
+          CLOUD_API_URL: ${{ secrets.CLOUD_API_URL }}
+        run: python scripts/check_patch.py
+
+      - name: New patch detected — action required
+        if: failure()
+        run: |
+          echo "::warning::A new LoL patch is available. Run the scraper locally and trigger the upload workflow."
+
