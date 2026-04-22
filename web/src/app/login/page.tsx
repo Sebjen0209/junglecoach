@@ -39,7 +39,13 @@ function LoginForm() {
     <div className="w-full max-w-sm">
       <div className="bg-[#0E0E18] border border-[#1C1C2A] rounded-2xl p-8 shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
         <h1 className="text-xl font-bold text-white mb-1">Welcome back</h1>
-        <p className="text-sm text-[#8080A0] mb-7">Log in to your account</p>
+        <p className="text-sm text-[#8080A0] mb-5">Log in to your account</p>
+
+        <div className="bg-[#00e5ff]/5 border border-[#00e5ff]/15 rounded-lg px-4 py-3 mb-6">
+          <p className="text-xs text-[#8080A0] leading-relaxed">
+            <span className="text-[#00e5ff] font-medium">Tip:</span> Log in via the app — the overlay&apos;s login button opens this page automatically.
+          </p>
+        </div>
 
         {(error || urlError) && (
           <div className="bg-[#E24B4A]/10 border border-[#E24B4A]/20 text-[#E24B4A] text-sm px-4 py-3 rounded-lg mb-5">

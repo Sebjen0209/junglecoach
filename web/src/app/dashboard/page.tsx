@@ -6,7 +6,7 @@ const DOWNLOAD_STEPS = [
   { n: "01", text: "Download the JungleCoach desktop app" },
   { n: "02", text: "Install and launch it" },
   { n: "03", text: "Log in via the app — it will open this browser window" },
-  { n: "04", text: "Open a League of Legends game and press Tab" },
+  { n: "04", text: "Open a League of Legends game — the overlay activates automatically" },
 ];
 
 export default async function DashboardPage() {

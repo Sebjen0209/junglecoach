@@ -131,20 +131,20 @@ function AuroraBackground({ ambientH, ambientS, ambientL }: { ambientH: number; 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { n: "01", title: "Screen capture", body: "The app captures your screen every ~3 seconds while League is running. Nothing is uploaded — all processing stays on your machine." },
-  { n: "02", title: "OCR scoreboard", body: "When you open the TAB scoreboard, OCR reads all 10 champion names and their roles in under a second." },
+  { n: "01", title: "Riot Live Client API", body: "JungleCoach connects to Riot's official Live Client API — a local service Riot provides during every active game. No screen capture, no image processing." },
+  { n: "02", title: "Champion detection", body: "All 10 champions, their roles, CS, kill scores, and game time are read directly from the game client in real time. Always accurate, always instant." },
   { n: "03", title: "Matchup data", body: "Win-rates, power spikes, and counter data are pulled from a local cache sourced from U.GG and LoLalytics." },
   { n: "04", title: "AI analysis", body: "Claude analyses matchup dynamics, game phase, CS differentials, and kill pressure across all three lanes simultaneously." },
   { n: "05", title: "Live overlay", body: "A ranked gank priority appears above your game — colour coded, with a one-sentence reason for each lane." },
 ];
 
 const FEATURES = [
-  { title: "Real-time, not post-game", body: "Refreshes every 5 seconds. Priority shifts the moment the scoreboard changes — not in a stat summary after you've already lost." },
+  { title: "Real-time, not post-game", body: "Refreshes every 5 seconds. Priority shifts the moment the game state changes — not in a stat summary after you've already lost." },
   { title: "All 3 lanes, ranked", body: "AI weighs matchup win-rates, game phase, and gank difficulty to rank Top, Mid, and Bot every refresh." },
   { title: "Natural language reasoning", body: "\"Riven hard counters GP early. One gank ends the lane.\" Not just a colour — a reason you can act on." },
   { title: "Game phase awareness", body: "A Kassadin at minute 8 is not worth ganking for. The model knows which champions scale and adjusts priority accordingly." },
   { title: "Lightweight overlay", body: "A slim, semi-transparent panel sits above the game. Draggable, toggleable with a hotkey, never blocks your view." },
-  { title: "Fully local", body: "No game data leaves your machine. The AI runs on our servers only when you open the scoreboard — and only sees champion names." },
+  { title: "Privacy first", body: "No sensitive game data leaves your machine. The AI sees only champion names and basic game state — sent to our servers solely to generate your suggestions." },
 ];
 
 const PLANS = [
@@ -189,12 +189,12 @@ const PLANS = [
 ];
 
 const FAQS = [
-  { q: "Is this against Riot's Terms of Service?", a: "No. JungleCoach reads only the TAB scoreboard — information you choose to open yourself. It does not hook into the game process, read memory, or access any data the player couldn't see normally. We are registered on the Riot Developer Portal." },
-  { q: "Does it work while the game is running?", a: "Yes. The app runs in the background and captures your screen passively. Open the TAB scoreboard any time and the overlay updates within seconds." },
+  { q: "Is this against Riot's Terms of Service?", a: "No. JungleCoach uses Riot's official Live Client API — a local service Riot themselves provide during every active game. It reads only data the player can see, does not hook into the game process, and does not read memory. We are registered on the Riot Developer Portal." },
+  { q: "Does it work while the game is running?", a: "Yes. The app connects to Riot's Live Client API in the background while League is running. Champion and game data updates automatically — no manual input or screen interaction needed." },
   { q: "What rank is this built for?", a: "Primarily Silver through Platinum — the ELO where the strategic gap between mid and high ranks is largest. High-ELO players who want a second opinion also find it useful." },
   { q: "What operating system does it support?", a: "Windows at launch. Mac and Linux support is planned for a future release." },
   { q: "Is there always a free tier?", a: "Yes, permanently. The free tier gives you the full live overlay experience. Riot requires every third-party tool to maintain a free option." },
-  { q: "Does my game data get sent to a server?", a: "The only data that leaves your machine is the list of champion names detected by OCR — sent to our AI model to generate suggestions. No game stats, account details, or replay data is ever uploaded." },
+  { q: "Does my game data get sent to a server?", a: "The only data that leaves your machine is champion names and basic game state (game time, CS, kill scores) — sent to our AI model to generate suggestions. No account details, replay data, or personal stats are ever uploaded." },
 ];
 
 // ─── Animation helpers ────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ function HeroSection({ onAmbientChange }: { onAmbientChange: (h: number, s: stri
             variants={fadeUp} initial="hidden" animate="visible" custom={2}
             className="text-lg text-[#c5cae9] leading-relaxed mb-10 max-w-xl font-light"
           >
-            JungleCoach reads your scoreboard via OCR and delivers AI-powered
+            JungleCoach connects to Riot's Live Client API and delivers AI-powered
             gank priority for every lane — live, while you play.
           </motion.p>
 
@@ -460,7 +460,7 @@ function HowItWorksSection() {
       <div className="max-w-5xl mx-auto">
         <FadeIn className="text-center mb-16">
           <p className="sub-heading text-xs text-[#f0c040] tracking-[0.25em] mb-3">HOW IT WORKS</p>
-          <h2 className="arcane-heading text-3xl md:text-4xl font-bold text-[#f0f2ff]">From scoreboard to suggestion in seconds</h2>
+          <h2 className="arcane-heading text-3xl md:text-4xl font-bold text-[#f0f2ff]">From game start to suggestion in seconds</h2>
         </FadeIn>
 
         <div className="relative">
