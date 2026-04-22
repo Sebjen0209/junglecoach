@@ -49,7 +49,7 @@ function SignupForm() {
         <p className="text-sm text-[#8080A0] leading-relaxed">
           We&apos;ve sent a confirmation link to{" "}
           <span className="text-white font-medium">{email}</span>.
-          Click it to activate your account.
+          Click here to activate your account.
         </p>
       </div>
     );
