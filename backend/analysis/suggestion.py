@@ -113,6 +113,7 @@ def analyse(
     snapshot: GameSnapshot,
     ai_client: AIClient,
     player_profiles: dict[str, PlayerProfile] | None = None,
+    jwt: str | None = None,
 ) -> AnalysisResult:
     """Full analysis pipeline: snapshot → experience → DB → scorer → AI → result.
 
@@ -157,12 +158,8 @@ def analyse(
         priority = score_to_priority(score)
         lane_scores[lane_name] = (score, priority)
 
-    # Get AI reasons (cached by ai_client if state is unchanged)
-    try:
-        reasons = ai_client.get_reasons(game_state)
-    except Exception as exc:
-        logger.error("AI client failed: %s — using score-based fallbacks", exc)
-        reasons = _fallback_reasons(game_state, lane_scores)
+    # Get AI reasons from cloud API (cached if state is unchanged)
+    reasons = ai_client.get_reasons(game_state, jwt=jwt)
 
     # Assemble final result
     lanes: dict[str, LaneSuggestion] = {}
@@ -174,7 +171,7 @@ def analyse(
             enemy_champion=lane.enemy_champion,
             matchup_winrate=lane.matchup_winrate,
             priority=priority,
-            reason=reasons.get(lane_name, ""),
+            reason=reasons.get(lane_name),
             score=score,
         )
 
@@ -208,19 +205,3 @@ def _compute_experience_deltas(
     }
 
 
-def _fallback_reasons(
-    game_state: GameState,
-    lane_scores: dict[str, tuple[float, str]],
-) -> dict[str, str]:
-    """Generate minimal reason strings from score data when the AI call fails."""
-    reasons: dict[str, str] = {}
-    for lane_name in _GANK_LANES:
-        lane: LaneState = getattr(game_state, lane_name)
-        _, priority = lane_scores[lane_name]
-        winrate_pct = int(lane.matchup_winrate * 100)
-        reasons[lane_name] = (
-            f"{lane.ally_champion} has a {winrate_pct}% win rate vs "
-            f"{lane.enemy_champion} in this matchup. "
-            f"Phase strength: {lane.ally_phase_strength:.0%}."
-        )
-    return reasons

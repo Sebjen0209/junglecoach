@@ -8,7 +8,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -146,8 +146,11 @@ async def status() -> StatusResponse:
 
 
 @app.get("/analysis", response_model=AnalysisResult)
-async def analysis() -> AnalysisResult:
+async def analysis(
+    authorization: str | None = Header(default=None),
+) -> AnalysisResult:
     global _last_analysis, _player_profiles, _profiles_loaded_for_current_game
+    jwt = authorization[len("Bearer "):] if authorization and authorization.startswith("Bearer ") else None
 
     # Fast-path: phase monitor says no game is running.
     if _capture_loop is not None and not _capture_loop.get_state().game_detected:
@@ -174,7 +177,7 @@ async def analysis() -> AnalysisResult:
         _profiles_loaded_for_current_game = True
 
     try:
-        _last_analysis = analyse(snapshot, _ai_client, _player_profiles or None)
+        _last_analysis = analyse(snapshot, _ai_client, _player_profiles or None, jwt=jwt)
     except Exception as exc:
         logger.error("Analysis pipeline error: %s", exc, exc_info=True)
         return _last_analysis

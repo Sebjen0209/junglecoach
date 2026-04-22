@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import data, postgame
+from routers import analysis, data, postgame
 
 # ---------------------------------------------------------------------------
 # Logging — stdout so Railway log aggregation picks it up
@@ -84,7 +84,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins_list,
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -114,6 +114,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(postgame.router)
 app.include_router(data.router)
+app.include_router(analysis.router)
 
 
 @app.get("/health", include_in_schema=False)

@@ -167,7 +167,9 @@ function startPolling() {
 
 async function fetchAnalysis() {
   try {
+    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
     const res = await fetch(`${API_BASE}/analysis`, {
+      headers,
       signal: AbortSignal.timeout(FETCH_TIMEOUT),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
