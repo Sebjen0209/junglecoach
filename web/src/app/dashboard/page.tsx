@@ -88,8 +88,9 @@ export default async function DashboardPage() {
           ))}
         </ol>
         <a
-          href="#"
+          href="https://github.com/Sebjen0209/junglecoach/releases/latest/download/JungleCoach-Setup.exe"
           className="inline-flex items-center gap-2 mt-8 btn-arcane-ghost text-xs"
+          download
         >
           Download for Windows
         </a>

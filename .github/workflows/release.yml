@@ -1,0 +1,79 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v*"
+
+# Needs write access to create a GitHub Release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python / PyInstaller ────────────────────────────────────────────────
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build PyInstaller bundle
+        working-directory: backend
+        run: pyinstaller junglecoach.spec --clean --noconfirm
+
+      # ── Node / electron-builder ─────────────────────────────────────────────
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: overlay/package-lock.json
+
+      - name: Install overlay dependencies
+        working-directory: overlay
+        run: npm ci
+
+      - name: Build NSIS installer
+        working-directory: overlay
+        run: npm run build
+        env:
+          # electron-builder needs this on Windows CI to avoid code-sign errors
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # ── Rename to a stable filename ─────────────────────────────────────────
+      # electron-builder names the file JungleCoach-Setup-<version>.exe.
+      # We copy it to JungleCoach-Setup.exe so the download URL never changes:
+      #   https://github.com/.../releases/latest/download/JungleCoach-Setup.exe
+
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem -Path overlay/dist -Filter "JungleCoach-Setup-*.exe" | Select-Object -First 1
+          if (-not $src) { throw "Installer not found in overlay/dist" }
+          Copy-Item $src.FullName "overlay/dist/JungleCoach-Setup.exe"
+          Write-Output "Installer: $($src.Name)"
+
+      # ── Publish GitHub Release ──────────────────────────────────────────────
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: overlay/dist/JungleCoach-Setup.exe
+          generate_release_notes: true
