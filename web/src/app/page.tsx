@@ -320,7 +320,7 @@ function HeroSection({ onAmbientChange }: { onAmbientChange: (h: number, s: stri
             variants={fadeUp} initial="hidden" animate="visible" custom={2}
             className="text-lg text-[#c5cae9] leading-relaxed mb-10 max-w-xl font-light"
           >
-            JungleCoach connects to Riot's Live Client API and delivers AI-powered
+            JungleCoach connects to Riot&apos;s Live Client API and delivers AI-powered
             gank priority for every lane — live, while you play.
           </motion.p>
 
