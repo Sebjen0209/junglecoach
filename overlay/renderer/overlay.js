@@ -2,8 +2,12 @@
 const API_BASE        = 'http://localhost:7429';
 const SUPABASE_URL    = 'https://qoxflvsmytpkbcxxpaxw.supabase.co';
 const SUPABASE_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFveGZsdnNteXRwa2JjeHhwYXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMTYzMTYsImV4cCI6MjA5MTc5MjMxNn0.AXmbjEdaka14XU29CdWPFlMLAIRuh6Tl8mwvb8XBW_k';
-const POLL_INTERVAL   = 5000;
 const FETCH_TIMEOUT   = 4000;
+
+// Free tier polls every 10s; Premium/Pro every 5s.
+function getPollInterval() {
+  return userPlan === 'free' ? 10_000 : 5_000;
+}
 const LANE_ORDER      = ['top', 'mid', 'bot'];
 const LANE_LABELS     = { top: 'TOP', mid: 'MID', bot: 'BOT' };
 
@@ -162,7 +166,7 @@ async function handleLogin() {
 function startPolling() {
   fetchAnalysis();
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(fetchAnalysis, POLL_INTERVAL);
+  pollTimer = setInterval(fetchAnalysis, getPollInterval());
 }
 
 async function fetchAnalysis() {
@@ -244,11 +248,14 @@ function renderLanes(data) {
     ? `<span class="meta-item">Min&nbsp;${data.game_minute}</span>` : '';
   const patchHTML = data.patch
     ? `<span class="meta-item">Patch&nbsp;${escapeHtml(data.patch)}</span>` : '';
+  const refreshHTML = `<span class="meta-item meta-refresh">${isPremium ? '5s' : '10s'}</span>`;
 
-  const hintText = isPremium ? 'Click a lane to see reasoning' : 'Click a lane — upgrade for AI reasoning';
+  const hintText = isPremium
+    ? 'Click a lane for AI reasoning'
+    : 'Upgrade for 5s refresh &amp; reasoning';
 
   content.innerHTML = `
-    ${(minuteHTML || patchHTML) ? `<div class="meta-row">${minuteHTML}${patchHTML}</div>` : ''}
+    <div class="meta-row">${minuteHTML}${patchHTML}<span class="meta-spacer"></span>${refreshHTML}</div>
     <div class="lanes">${lanesHTML}</div>
     <div class="hint">${hintText}</div>
   `;

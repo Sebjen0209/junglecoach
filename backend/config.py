@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Cloud API — used for AI reasoning and startup DB update check.
     # Leave empty to skip both (e.g. for offline dev).
     cloud_api_url: str = Field(default="", alias="CLOUD_API_URL")
+    # Supabase — used to verify user tokens and enforce post-game limits.
+    # Leave empty to skip auth checks (dev mode).
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
 
     model_config = {"env_file": ".env", "populate_by_name": True}
 

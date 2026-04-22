@@ -14,6 +14,13 @@ from pydantic import BaseModel
 
 from analysis.ai_client import AIClient
 from analysis.postgame import run_postgame_analysis
+from data.supabase_client import (
+    count_postgame_usage,
+    get_plan_limit,
+    get_user_plan,
+    record_postgame_usage,
+    verify_and_get_user_id,
+)
 from analysis.suggestion import analyse
 from capture.live_client import get_snapshot
 from capture.screen import CaptureLoop
@@ -87,7 +94,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET"],
-    allow_headers=["Authorization"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -196,24 +203,52 @@ def postgame(
     match_id: str,
     puuid: str | None = None,
     summoner_name: str | None = None,
+    authorization: str | None = Header(default=None),
 ):
     """Fetch and analyse a completed match, returning timestamped coaching feedback.
 
-    FastAPI runs sync endpoints in a thread pool automatically — safe to use
-    the blocking riotwatcher calls here without asyncio gymnastics.
-
-    Args:
-        match_id:      Riot match ID, e.g. EUW1_7123456789 (path parameter).
-        puuid:         Player PUUID to identify which team's jungler to coach.
-        summoner_name: Alternative to puuid — triggers one extra Riot API call.
-
+    Requires a valid Supabase bearer token when SUPABASE_URL is configured.
+    Returns 401 if the token is missing or invalid.
+    Returns 429 if the user has exhausted their plan's monthly/weekly limit.
     Returns 422 if the match has no jungle participant.
     Returns 503 if the Riot API is unreachable or the key is invalid.
     """
+    user_id: str | None = None
+    plan = "free"
+    token: str | None = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+
+    supabase_enabled = bool(settings.supabase_url and settings.supabase_anon_key)
+
+    if supabase_enabled:
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        user_id = verify_and_get_user_id(token)
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        plan = get_user_plan(user_id, token)
+        limit = get_plan_limit(plan)
+        usage = count_postgame_usage(user_id, token, plan)
+
+        if usage >= limit["count"]:
+            window = "month" if limit["days"] == 30 else "week"
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Post-game limit reached: {limit['count']} per {window} on the {plan} plan. "
+                    "Upgrade for a higher limit."
+                ),
+            )
+
     try:
-        return run_postgame_analysis(match_id, puuid=puuid, summoner_name=summoner_name)
+        result = run_postgame_analysis(match_id, puuid=puuid, summoner_name=summoner_name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         logger.error("Post-game analysis failed: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if supabase_enabled and user_id and token:
+        record_postgame_usage(user_id, match_id, token)
+
+    return result

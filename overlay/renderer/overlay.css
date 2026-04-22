@@ -74,6 +74,14 @@ body {
   letter-spacing: 0.03em;
 }
 
+.meta-spacer { flex: 1; }
+
+.meta-refresh {
+  color: #3a5c3f;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 /* ── Lanes ─────────────────────────────────────────────────── */
 .lanes { display: flex; flex-direction: column; }
 
