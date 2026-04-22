@@ -146,6 +146,43 @@ def load_existing_analysis(user_id: str, match_id: str) -> PostGameAnalysis | No
     return None
 
 
+def get_user_plan(user_id: str) -> str:
+    """Return the user's active subscription plan ('free' if not found or inactive)."""
+    try:
+        result = (
+            get_client()
+            .table("subscriptions")
+            .select("plan,status")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            row = result.data[0]
+            if row.get("status") == "active":
+                return row.get("plan", "free")
+    except Exception as exc:
+        logger.warning("Could not fetch plan for user %.8s: %s", user_id, exc)
+    return "free"
+
+
+def count_recent_analyses(user_id: str, since_iso: str) -> int:
+    """Count how many distinct post-game analyses this user has run since `since_iso`."""
+    try:
+        result = (
+            get_client()
+            .table("post_game_analyses")
+            .select("id")
+            .eq("user_id", user_id)
+            .gte("created_at", since_iso)
+            .execute()
+        )
+        return len(result.data)
+    except Exception as exc:
+        logger.warning("Could not count analyses for user %.8s: %s", user_id, exc)
+    return 0
+
+
 def save_analysis(user_id: str, analysis: PostGameAnalysis) -> None:
     """Persist a completed PostGameAnalysis to Supabase.
 

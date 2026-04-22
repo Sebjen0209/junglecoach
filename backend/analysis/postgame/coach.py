@@ -174,8 +174,13 @@ def _parse_response(raw: str) -> list[CoachingMoment]:
     Raises:
         ValueError: If the response is not a valid JSON array.
     """
+    # Strip markdown code fences if Claude wraps the output despite instructions
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]  # drop opening ```json line
+        text = text.rsplit("```", 1)[0]  # drop closing ```
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Claude returned non-JSON: {raw!r}") from exc
 

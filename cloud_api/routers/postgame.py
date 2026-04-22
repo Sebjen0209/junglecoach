@@ -11,13 +11,25 @@ Flow:
 
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
 from analysis.postgame import run_postgame_analysis
 from auth import CurrentUser
-from db.supabase import load_existing_analysis, save_analysis
+from db.supabase import (
+    count_recent_analyses,
+    get_user_plan,
+    load_existing_analysis,
+    save_analysis,
+)
 from models import PostGameAnalysis
+
+PLAN_LIMITS: dict[str, dict] = {
+    "free":    {"count": 2,  "days": 30},
+    "premium": {"count": 15, "days": 7},
+    "pro":     {"count": 35, "days": 7},
+}
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +72,7 @@ def get_postgame_analysis(
     Raises:
         401: Missing or invalid Bearer token.
         422: Malformed match ID or no jungle participant found in the match.
+        429: User has exhausted their plan's post-game analysis quota.
         503: Riot API or Anthropic API unreachable.
     """
     if not _MATCH_ID_RE.match(match_id):
@@ -73,10 +86,26 @@ def get_postgame_analysis(
 
     user_id = current_user["id"]
 
-    # --- Cache hit: return persisted result immediately ---
+    # --- Cache hit: return persisted result immediately (no quota consumed) ---
     cached = load_existing_analysis(user_id, match_id)
     if cached is not None:
         return cached
+
+    # --- Quota check: enforce per-plan limits before running the pipeline ---
+    plan = get_user_plan(user_id)
+    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+    since = (datetime.now(timezone.utc) - timedelta(days=limit["days"])).isoformat()
+    usage = count_recent_analyses(user_id, since)
+
+    if usage >= limit["count"]:
+        window = "month" if limit["days"] == 30 else "week"
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Post-game analysis limit reached: {limit['count']} per {window} "
+                f"on the {plan} plan. Upgrade for a higher limit."
+            ),
+        )
 
     # --- Cache miss: run full pipeline ---
     logger.info(
