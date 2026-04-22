@@ -59,6 +59,7 @@ def run_postgame_analysis(
         jungler_data.objectives,
         jungler_data.wards,
         jungler_data.team_id,
+        death_timestamps=jungler_data.death_timestamps,
     )
     pathing = detect_pathing_issues(jungler_data)
 

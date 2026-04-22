@@ -62,6 +62,10 @@ class RawGank:
     assisting_ids: list[int]
     position_x: int
     position_y: int
+    killer_champion: str = ""
+    killer_role: str = ""
+    victim_champion: str = ""
+    victim_role: str = ""
 
 
 @dataclass
@@ -94,6 +98,9 @@ class JunglerTimelineData:
     ganks: list[RawGank] = field(default_factory=list)
     objectives: list[RawObjective] = field(default_factory=list)
     wards: list[RawWard] = field(default_factory=list)
+    death_timestamps: list[int] = field(default_factory=list)
+    # participantId → {champion, role, team_id} — built at extraction time
+    participant_info: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +136,16 @@ def extract_jungler_data(
         champion_name=jungler.get("championName", "Unknown"),
         puuid=jungler.get("puuid", ""),
     )
+
+    # Build participant lookup before processing frames so kill events can resolve names/roles
+    data.participant_info = {
+        p["participantId"]: {
+            "champion": p.get("championName", "Unknown"),
+            "role": p.get("teamPosition", "UNKNOWN"),
+            "team_id": p["teamId"],
+        }
+        for p in match_data["info"]["participants"]
+    }
 
     for frame in timeline_data["info"]["frames"]:
         _process_frame(frame, data, match_data)
@@ -206,16 +223,27 @@ def _process_frame(frame: dict, data: JunglerTimelineData, match_data: dict) -> 
 def _handle_champion_kill(event: dict, data: JunglerTimelineData) -> None:
     assisting = event.get("assistingParticipantIds", [])
     killer = event.get("killerId", 0)
+    victim = event.get("victimId", 0)
+
+    # Track when the jungler dies so objectives can check if they were dead
+    if victim == data.participant_id:
+        data.death_timestamps.append(event["timestamp"])
 
     if killer == data.participant_id or data.participant_id in assisting:
         pos = event.get("position", {})
+        killer_info = data.participant_info.get(killer, {})
+        victim_info = data.participant_info.get(victim, {})
         data.ganks.append(RawGank(
             timestamp_ms=event["timestamp"],
             killer_id=killer,
-            victim_id=event.get("victimId", 0),
+            victim_id=victim,
             assisting_ids=assisting,
             position_x=pos.get("x", 0),
             position_y=pos.get("y", 0),
+            killer_champion=killer_info.get("champion", "Unknown"),
+            killer_role=killer_info.get("role", "UNKNOWN"),
+            victim_champion=victim_info.get("champion", "Unknown"),
+            victim_role=victim_info.get("role", "UNKNOWN"),
         ))
 
 

@@ -1,14 +1,11 @@
 """Classifies raw timeline data into coaching-relevant jungler events.
 
 Takes JunglerTimelineData from timeline.py and produces:
-  - GankEvent     — a gank/kill in a named lane with outcome
+  - GankEvent  — a gank/kill in a named lane with outcome
   - ObjectiveEvent — an objective fight with vision + proximity flags
   - PathingIssue   — a minute where the jungler was in base or idle
 
 All timestamps are in mm:ss string format for display and for the Claude prompt.
-
-NOTE: This file is kept in sync with backend/analysis/postgame/events.py.
-      Extract to a shared package when the repo grows enough to warrant it.
 """
 
 import logging
@@ -32,18 +29,24 @@ from analysis.postgame.timeline import (
 
 logger = logging.getLogger(__name__)
 
-# Lane boundaries by y-coordinate (blue-side perspective)
+# Lane boundaries (Summoner's Rift 14820×14820, blue base = low x/y)
+_TOP_X_MAX = 3800    # top lane: low x AND high y
+_TOP_Y_MIN = 9500
+_BOT_X_MIN = 10500   # bot lane: high x AND low y
 _BOT_Y_MAX = 5000
-_TOP_Y_MIN = 10000
+_MID_TOLERANCE = 2000  # |x - y| < this → kill is on the mid-lane diagonal
+
+# 90 seconds covers the maximum respawn timer for most of the game
+_DEAD_WINDOW_MS = 90_000
 
 # Less than this many units of movement in a minute → flag as idle
 _IDLE_MOVEMENT_THRESHOLD = 800
 
 # Expected first-spawn timestamps in milliseconds
 _FIRST_SPAWN_MS: dict[str, int] = {
-    "DRAGON": 5 * 60 * 1_000,        # 5:00
+    "DRAGON": 5 * 60 * 1_000,       # 5:00
     "BARON_NASHOR": 20 * 60 * 1_000, # 20:00
-    "RIFTHERALD": 8 * 60 * 1_000,    # 8:00
+    "RIFTHERALD": 8 * 60 * 1_000,   # 8:00
 }
 
 # Tolerance for matching actual kill time to expected spawn (ms)
@@ -58,11 +61,15 @@ _SPAWN_MATCH_WINDOW_MS = 90_000
 class GankEvent:
     timestamp_ms: int
     timestamp_str: str
-    lane: str           # "top" | "mid" | "bot" | "unknown"
-    outcome: str        # "kill" | "assist"
+    lane: str            # "top" | "mid" | "bot" | "jungle"
+    outcome: str         # "kill" | "assist"
     position_x: int
     position_y: int
     was_jungler_killer: bool
+    killer_champion: str = ""   # champion that got the kill (may not be the jungler)
+    killer_role: str = ""       # their team position
+    victim_champion: str = ""   # champion that died
+    victim_role: str = ""
 
 
 @dataclass
@@ -75,6 +82,7 @@ class ObjectiveEvent:
     was_near_pit: bool
     had_vision_before: bool
     is_first_spawn: bool  # False for respawns (less critical to flag)
+    jungler_was_dead: bool = False
 
 
 @dataclass
@@ -96,11 +104,18 @@ def _ms_to_str(ms: int) -> str:
 
 
 def _classify_lane(x: int, y: int) -> str:
-    if y < _BOT_Y_MAX:
-        return "bot"
-    if y > _TOP_Y_MIN:
+    if x < _TOP_X_MAX and y > _TOP_Y_MIN:
         return "top"
-    return "mid"
+    if x > _BOT_X_MIN and y < _BOT_Y_MAX:
+        return "bot"
+    if abs(x - y) < _MID_TOLERANCE:
+        return "mid"
+    return "jungle"
+
+
+def _was_jungler_dead(death_timestamps: list[int], event_ms: int) -> bool:
+    """Return True if the jungler died within _DEAD_WINDOW_MS before event_ms."""
+    return any(d <= event_ms <= d + _DEAD_WINDOW_MS for d in death_timestamps)
 
 
 def _pit_for(monster_type: str) -> tuple[int, int]:
@@ -136,18 +151,31 @@ def _is_first_spawn(monster_type: str, actual_ms: int) -> bool:
 # ---------------------------------------------------------------------------
 
 def classify_ganks(raw_ganks: list[RawGank], jungler_id: int) -> list[GankEvent]:
-    """Convert raw CHAMPION_KILL events into labelled GankEvents."""
+    """Convert raw CHAMPION_KILL events into labelled GankEvents.
+
+    Args:
+        raw_ganks:  RawGank list from JunglerTimelineData.
+        jungler_id: participantId of the jungler.
+
+    Returns:
+        List of GankEvent, sorted by timestamp.
+    """
     events: list[GankEvent] = []
     for g in raw_ganks:
         was_killer = g.killer_id == jungler_id
+        outcome = "kill" if was_killer else "assist"
         events.append(GankEvent(
             timestamp_ms=g.timestamp_ms,
             timestamp_str=_ms_to_str(g.timestamp_ms),
             lane=_classify_lane(g.position_x, g.position_y),
-            outcome="kill" if was_killer else "assist",
+            outcome=outcome,
             position_x=g.position_x,
             position_y=g.position_y,
             was_jungler_killer=was_killer,
+            killer_champion=g.killer_champion,
+            killer_role=g.killer_role,
+            victim_champion=g.victim_champion,
+            victim_role=g.victim_role,
         ))
     return sorted(events, key=lambda e: e.timestamp_ms)
 
@@ -156,12 +184,25 @@ def classify_objectives(
     raw_objectives: list[RawObjective],
     wards: list[RawWard],
     jungler_team_id: int,
+    death_timestamps: list[int] | None = None,
 ) -> list[ObjectiveEvent]:
-    """Convert raw ELITE_MONSTER_KILL events into labelled ObjectiveEvents."""
+    """Convert raw ELITE_MONSTER_KILL events into labelled ObjectiveEvents.
+
+    Args:
+        raw_objectives: RawObjective list from JunglerTimelineData.
+        wards:          All RawWard events (used for vision-before check).
+        jungler_team_id: teamId of the jungler's team.
+
+    Returns:
+        List of ObjectiveEvent, sorted by timestamp.
+    """
+    deaths = death_timestamps or []
     events: list[ObjectiveEvent] = []
     for obj in raw_objectives:
+        jungler_was_dead = _was_jungler_dead(deaths, obj.timestamp_ms)
         pit = _pit_for(obj.monster_type)
         d = dist(obj.jungler_x, obj.jungler_y, pit[0], pit[1])
+        had_vision = _had_vision_near(wards, pit, obj.timestamp_ms)
         events.append(ObjectiveEvent(
             timestamp_ms=obj.timestamp_ms,
             timestamp_str=_ms_to_str(obj.timestamp_ms),
@@ -169,14 +210,22 @@ def classify_objectives(
             secured_by_ally=(obj.killer_team_id == jungler_team_id),
             jungler_distance_from_pit=round(d),
             was_near_pit=(d <= NEAR_OBJECTIVE_RADIUS),
-            had_vision_before=_had_vision_near(wards, pit, obj.timestamp_ms),
+            had_vision_before=had_vision,
             is_first_spawn=_is_first_spawn(obj.monster_type, obj.timestamp_ms),
+            jungler_was_dead=jungler_was_dead,
         ))
     return sorted(events, key=lambda e: e.timestamp_ms)
 
 
 def detect_pathing_issues(data: JunglerTimelineData) -> list[PathingIssue]:
-    """Flag minutes where the jungler was sitting in base or barely moving."""
+    """Flag minutes where the jungler was sitting in base or barely moving.
+
+    Args:
+        data: JunglerTimelineData with position_frames populated.
+
+    Returns:
+        List of PathingIssue, sorted by minute.
+    """
     issues: list[PathingIssue] = []
     base_pos = BLUE_BASE if data.team_id == 100 else RED_BASE
 
@@ -197,7 +246,8 @@ def detect_pathing_issues(data: JunglerTimelineData) -> list[PathingIssue]:
                 issue="in_base",
             ))
         elif prev is not None:
-            if dist(frame.x, frame.y, prev.x, prev.y) < _IDLE_MOVEMENT_THRESHOLD:
+            movement = dist(frame.x, frame.y, prev.x, prev.y)
+            if movement < _IDLE_MOVEMENT_THRESHOLD:
                 issues.append(PathingIssue(
                     minute=frame.minute,
                     timestamp_str=_ms_to_str(frame.minute * 60_000),

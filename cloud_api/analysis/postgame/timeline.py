@@ -11,9 +11,6 @@ Coordinate system: Summoner's Rift is 0–14820 on both axes.
   Bot lane  → low y (~3000-)
   Blue base → (~540, 490)
   Red base  → (~14340, 14390)
-
-NOTE: This file is kept in sync with backend/analysis/postgame/timeline.py.
-      Extract to a shared package when the repo grows enough to warrant it.
 """
 
 import logging
@@ -65,6 +62,10 @@ class RawGank:
     assisting_ids: list[int]
     position_x: int
     position_y: int
+    killer_champion: str = ""
+    killer_role: str = ""
+    victim_champion: str = ""
+    victim_role: str = ""
 
 
 @dataclass
@@ -97,6 +98,9 @@ class JunglerTimelineData:
     ganks: list[RawGank] = field(default_factory=list)
     objectives: list[RawObjective] = field(default_factory=list)
     wards: list[RawWard] = field(default_factory=list)
+    death_timestamps: list[int] = field(default_factory=list)
+    # participantId → {champion, role, team_id} — built at extraction time
+    participant_info: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +137,16 @@ def extract_jungler_data(
         puuid=jungler.get("puuid", ""),
     )
 
+    # Build participant lookup before processing frames so kill events can resolve names/roles
+    data.participant_info = {
+        p["participantId"]: {
+            "champion": p.get("championName", "Unknown"),
+            "role": p.get("teamPosition", "UNKNOWN"),
+            "team_id": p["teamId"],
+        }
+        for p in match_data["info"]["participants"]
+    }
+
     for frame in timeline_data["info"]["frames"]:
         _process_frame(frame, data, match_data)
 
@@ -153,6 +167,7 @@ def _find_jungler(match_data: dict, target_puuid: str | None) -> dict:
     participants = match_data["info"]["participants"]
 
     if target_puuid:
+        # Find the target player's team, then their team's jungler
         target_team: int | None = None
         for p in participants:
             if p["puuid"] == target_puuid:
@@ -180,6 +195,7 @@ def _process_frame(frame: dict, data: JunglerTimelineData, match_data: dict) -> 
     ts = frame["timestamp"]
     minute = round(ts / 60_000)
 
+    # Position snapshot
     p_frame = frame["participantFrames"].get(str(data.participant_id))
     if p_frame and "position" in p_frame:
         pos = p_frame["position"]
@@ -190,8 +206,10 @@ def _process_frame(frame: dict, data: JunglerTimelineData, match_data: dict) -> 
 
         if etype == "CHAMPION_KILL":
             _handle_champion_kill(event, data)
+
         elif etype == "ELITE_MONSTER_KILL":
             _handle_objective(event, data, match_data)
+
         elif etype == "WARD_PLACED":
             pos = event.get("position", {})
             data.wards.append(RawWard(
@@ -205,16 +223,27 @@ def _process_frame(frame: dict, data: JunglerTimelineData, match_data: dict) -> 
 def _handle_champion_kill(event: dict, data: JunglerTimelineData) -> None:
     assisting = event.get("assistingParticipantIds", [])
     killer = event.get("killerId", 0)
+    victim = event.get("victimId", 0)
+
+    # Track when the jungler dies so objectives can check if they were dead
+    if victim == data.participant_id:
+        data.death_timestamps.append(event["timestamp"])
 
     if killer == data.participant_id or data.participant_id in assisting:
         pos = event.get("position", {})
+        killer_info = data.participant_info.get(killer, {})
+        victim_info = data.participant_info.get(victim, {})
         data.ganks.append(RawGank(
             timestamp_ms=event["timestamp"],
             killer_id=killer,
-            victim_id=event.get("victimId", 0),
+            victim_id=victim,
             assisting_ids=assisting,
             position_x=pos.get("x", 0),
             position_y=pos.get("y", 0),
+            killer_champion=killer_info.get("champion", "Unknown"),
+            killer_role=killer_info.get("role", "UNKNOWN"),
+            victim_champion=victim_info.get("champion", "Unknown"),
+            victim_role=victim_info.get("role", "UNKNOWN"),
         ))
 
 
