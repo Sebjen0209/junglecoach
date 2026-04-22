@@ -24,3 +24,5 @@ overlay/build/
 # Secrets
 *.pem
 *.key
+
+scripts/upload_local.sh
