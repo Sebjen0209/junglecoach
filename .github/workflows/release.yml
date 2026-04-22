@@ -54,8 +54,11 @@ jobs:
         working-directory: overlay
         run: npm run build
         env:
-          # electron-builder needs this on Windows CI to avoid code-sign errors
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List overlay/dist (debug)
+        shell: pwsh
+        run: Get-ChildItem -Path overlay/dist -Recurse | Select-Object FullName, Length
 
       # ── Rename to a stable filename ─────────────────────────────────────────
       # electron-builder names the file JungleCoach-Setup-<version>.exe.
@@ -65,10 +68,12 @@ jobs:
       - name: Rename installer
         shell: pwsh
         run: |
-          $src = Get-ChildItem -Path overlay/dist -Filter "JungleCoach-Setup-*.exe" | Select-Object -First 1
-          if (-not $src) { throw "Installer not found in overlay/dist" }
+          $src = Get-ChildItem -Path overlay/dist -Recurse -Filter "*.exe" |
+                 Where-Object { $_.Name -notlike "*unpacked*" } |
+                 Select-Object -First 1
+          if (-not $src) { throw "No .exe found under overlay/dist" }
+          Write-Output "Found: $($src.FullName)"
           Copy-Item $src.FullName "overlay/dist/JungleCoach-Setup.exe"
-          Write-Output "Installer: $($src.Name)"
 
       # ── Publish GitHub Release ──────────────────────────────────────────────
 
