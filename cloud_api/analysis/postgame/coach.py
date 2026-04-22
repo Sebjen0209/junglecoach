@@ -96,28 +96,44 @@ def _build_event_list(
     events: list[dict[str, Any]] = []
 
     for g in ganks:
-        verb = "got a kill" if g.was_jungler_killer else "assisted a kill"
+        victim = g.victim_champion or "an enemy"
+        location = "in the jungle" if g.lane == "jungle" else f"in {g.lane} lane"
+
+        if g.was_jungler_killer:
+            action = f"{champion_name} got the kill on {victim} {location}."
+        else:
+            role_label = g.killer_role.replace("_", " ").title() if g.killer_role not in ("", "UNKNOWN") else "an ally"
+            killer_desc = f"{g.killer_champion} ({role_label})" if g.killer_champion else role_label
+            action = f"{killer_desc} got the kill on {victim} {location}. {champion_name} assisted."
+
         events.append({
             "index": len(events),
             "timestamp": g.timestamp_str,
             "type": "gank",
-            "description": f"{champion_name} {verb} on an enemy in {g.lane} lane.",
+            "description": action,
             "lane": g.lane,
             "outcome": g.outcome,
+            "killer_champion": g.killer_champion,
+            "killer_role": g.killer_role,
+            "victim_champion": g.victim_champion,
         })
 
     for obj in objectives:
         name = _OBJECTIVE_DISPLAY.get(obj.objective_type, obj.objective_type)
         secured = "secured by ally team" if obj.secured_by_ally else "taken by enemy team"
-        proximity = (
-            "near the pit" if obj.was_near_pit
-            else f"{int(obj.jungler_distance_from_pit)} map units away from the pit"
-        )
         vision = (
             "ward coverage existed" if obj.had_vision_before
             else "no ward coverage in the 60s before"
         )
         spawn_note = " (first spawn)" if obj.is_first_spawn else " (respawn)"
+
+        if obj.jungler_was_dead:
+            proximity = "dead at this time"
+        elif obj.was_near_pit:
+            proximity = "near the pit"
+        else:
+            proximity = f"{int(obj.jungler_distance_from_pit)} map units away from the pit"
+
         events.append({
             "index": len(events),
             "timestamp": obj.timestamp_str,
@@ -127,6 +143,7 @@ def _build_event_list(
                 f"Jungler was {proximity}. {vision}."
             ),
             "secured_by_ally": obj.secured_by_ally,
+            "jungler_was_dead": obj.jungler_was_dead,
             "jungler_was_near": obj.was_near_pit,
             "had_vision": obj.had_vision_before,
             "is_first_spawn": obj.is_first_spawn,

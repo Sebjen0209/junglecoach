@@ -1,9 +1,6 @@
-"""Post-game jungle analysis package (cloud version).
+"""Post-game jungle analysis package.
 
 Top-level entry point: `run_postgame_analysis(match_id, puuid?, summoner_name?)`
-
-The only difference from the backend version is that riot_client.py here uses
-Supabase for timeline caching instead of the local disk.
 """
 
 import logging
@@ -32,26 +29,25 @@ def run_postgame_analysis(
     puuid: str | None = None,
     summoner_name: str | None = None,
 ) -> PostGameAnalysis:
-    """Full post-game pipeline: Riot API → parse → classify → Claude → result.
+    """Full post-game pipeline: Riot API → timeline parse → classify → Claude coaching.
 
     Args:
         match_id:      Riot match ID (e.g. "EUW1_7123456789").
-                       Region routing is inferred automatically from the prefix.
         puuid:         Player PUUID — identifies which team's jungler to analyse.
-        summoner_name: Alternative to puuid; triggers one extra Riot API call.
+        summoner_name: Alternative to puuid; triggers a summoner lookup (costs 1 API call).
 
     Returns:
-        PostGameAnalysis with timestamped coaching moments sorted by game time.
+        PostGameAnalysis with timestamped coaching moments, sorted by game time.
 
     Raises:
-        ValueError:   If no jungle participant is found, or the match ID is invalid.
-        RuntimeError: On Riot API or Anthropic API failure.
+        RuntimeError:  On Riot API failure (caller should surface as HTTP 503).
+        ValueError:    If no jungle participant is found in the match.
     """
     platform, region = routing_from_match_id(match_id)
-    logger.info("Routing: match=%s platform=%s region=%s", match_id, platform, region)
+    logger.info("Routing for %s → platform=%s, region=%s", match_id, platform, region)
 
     if puuid is None and summoner_name:
-        puuid = fetch_puuid_by_summoner_name(summoner_name, platform, region)
+        puuid = fetch_puuid_by_summoner_name(summoner_name, platform)
 
     match_data = fetch_match(match_id, region)
     timeline_data = fetch_timeline(match_id, region)
@@ -63,6 +59,7 @@ def run_postgame_analysis(
         jungler_data.objectives,
         jungler_data.wards,
         jungler_data.team_id,
+        death_timestamps=jungler_data.death_timestamps,
     )
     pathing = detect_pathing_issues(jungler_data)
 
