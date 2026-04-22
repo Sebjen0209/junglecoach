@@ -1,7 +1,7 @@
 """Tests for analysis/ai_client.py.
 
-The Anthropic client is mocked throughout — these tests validate prompt
-building, JSON parsing, caching logic, and error handling.
+The httpx client is mocked throughout — these tests validate caching logic,
+JWT forwarding, and graceful degradation when the cloud API is unreachable.
 """
 
 import time
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from analysis.ai_client import AIClient, _build_user_prompt, _parse_reasons, _state_changed_enough
+from analysis.ai_client import AIClient, _state_changed_enough
 from models import GameState, LaneState
 
 
@@ -41,67 +41,18 @@ def _make_game_state(**overrides) -> GameState:
     return GameState(**defaults)
 
 
-_VALID_AI_RESPONSE = """\
-{
-  "top": {"priority": "high", "reason": "Riven hard counters Gangplank pre-6."},
-  "mid": {"priority": "medium", "reason": "Zed can kill Azir at level 6."},
-  "bot": {"priority": "low", "reason": "Even lane, spend time elsewhere."}
-}"""
+_VALID_CLOUD_RESPONSE = {
+    "top": "Riven hard counters Gangplank pre-6.",
+    "mid": "Zed can kill Azir at level 6.",
+    "bot": "Even lane, spend time elsewhere.",
+}
 
 
-# ---------------------------------------------------------------------------
-# _build_user_prompt()
-# ---------------------------------------------------------------------------
-
-class TestBuildUserPrompt:
-    def test_contains_all_three_lanes(self):
-        gs = _make_game_state()
-        prompt = _build_user_prompt(gs)
-        assert "TOP:" in prompt
-        assert "MID:" in prompt
-        assert "BOT:" in prompt
-
-    def test_contains_champion_names(self):
-        gs = _make_game_state()
-        prompt = _build_user_prompt(gs)
-        assert "Riven" in prompt
-        assert "Gangplank" in prompt
-
-    def test_contains_game_minute(self):
-        gs = _make_game_state(game_minute=17)
-        prompt = _build_user_prompt(gs)
-        assert "17" in prompt
-
-    def test_contains_winrate_percentage(self):
-        gs = _make_game_state()
-        prompt = _build_user_prompt(gs)
-        assert "58%" in prompt
-
-
-# ---------------------------------------------------------------------------
-# _parse_reasons()
-# ---------------------------------------------------------------------------
-
-class TestParseReasons:
-    def test_valid_response_parsed_correctly(self):
-        reasons = _parse_reasons(_VALID_AI_RESPONSE)
-        assert reasons["top"] == "Riven hard counters Gangplank pre-6."
-        assert reasons["mid"] == "Zed can kill Azir at level 6."
-        assert reasons["bot"] == "Even lane, spend time elsewhere."
-
-    def test_missing_lane_raises(self):
-        partial = '{"top": {"priority": "high", "reason": "ok"}, "mid": {"priority": "low", "reason": "ok"}}'
-        with pytest.raises(ValueError, match="Missing lane"):
-            _parse_reasons(partial)
-
-    def test_missing_reason_key_raises(self):
-        bad = '{"top": {"priority": "high"}, "mid": {"priority": "low", "reason": "ok"}, "bot": {"priority": "low", "reason": "ok"}}'
-        with pytest.raises(ValueError, match="Missing 'reason'"):
-            _parse_reasons(bad)
-
-    def test_non_json_raises(self):
-        with pytest.raises(ValueError, match="non-JSON"):
-            _parse_reasons("Sorry, I cannot help with that.")
+def _mock_httpx_response(data: dict) -> MagicMock:
+    resp = MagicMock()
+    resp.json.return_value = data
+    resp.raise_for_status = MagicMock()
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -140,46 +91,66 @@ class TestStateChangedEnough:
 
 
 # ---------------------------------------------------------------------------
-# AIClient.get_reasons() — mocked Anthropic client
+# AIClient.get_reasons() — mocked httpx + Railway cloud API
 # ---------------------------------------------------------------------------
 
-def _mock_anthropic_response(text: str) -> MagicMock:
-    content_block = MagicMock()
-    content_block.text = text
-    response = MagicMock()
-    response.content = [content_block]
-    return response
-
-
 class TestAIClientGetReasons:
-    def _make_client(self) -> AIClient:
-        with patch("analysis.ai_client.anthropic.Anthropic"):
-            client = AIClient()
-        return client
-
     def test_returns_reason_dict(self):
-        client = self._make_client()
-        client._client.messages.create.return_value = _mock_anthropic_response(_VALID_AI_RESPONSE)
-        reasons = client.get_reasons(_make_game_state())
+        client = AIClient()
+        with patch("analysis.ai_client.httpx.post", return_value=_mock_httpx_response(_VALID_CLOUD_RESPONSE)):
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                reasons = client.get_reasons(_make_game_state(), jwt="fake-jwt")
         assert set(reasons.keys()) == {"top", "mid", "bot"}
 
-    def test_api_called_once_on_first_call(self):
-        client = self._make_client()
-        client._client.messages.create.return_value = _mock_anthropic_response(_VALID_AI_RESPONSE)
-        client.get_reasons(_make_game_state())
-        assert client._client.messages.create.call_count == 1
+    def test_jwt_forwarded_in_header(self):
+        client = AIClient()
+        with patch("analysis.ai_client.httpx.post", return_value=_mock_httpx_response(_VALID_CLOUD_RESPONSE)) as mock_post:
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                client.get_reasons(_make_game_state(), jwt="user-token")
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["Authorization"] == "Bearer user-token"
 
-    def test_cache_prevents_second_api_call(self):
-        client = self._make_client()
-        client._client.messages.create.return_value = _mock_anthropic_response(_VALID_AI_RESPONSE)
+    def test_no_jwt_sends_no_auth_header(self):
+        client = AIClient()
+        with patch("analysis.ai_client.httpx.post", return_value=_mock_httpx_response(_VALID_CLOUD_RESPONSE)) as mock_post:
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                client.get_reasons(_make_game_state(), jwt=None)
+        _, kwargs = mock_post.call_args
+        assert "Authorization" not in kwargs.get("headers", {})
+
+    def test_cache_prevents_second_cloud_call(self):
+        client = AIClient()
         gs = _make_game_state()
-        client.get_reasons(gs)
-        client.get_reasons(gs)  # same state, within cache window
-        assert client._client.messages.create.call_count == 1
+        with patch("analysis.ai_client.httpx.post", return_value=_mock_httpx_response(_VALID_CLOUD_RESPONSE)) as mock_post:
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                client.get_reasons(gs)
+                client.get_reasons(gs)  # same state, within cache window
+        assert mock_post.call_count == 1
 
     def test_cache_busted_on_phase_change(self):
-        client = self._make_client()
-        client._client.messages.create.return_value = _mock_anthropic_response(_VALID_AI_RESPONSE)
-        client.get_reasons(_make_game_state(game_phase="early"))
-        client.get_reasons(_make_game_state(game_phase="mid"))
-        assert client._client.messages.create.call_count == 2
+        client = AIClient()
+        with patch("analysis.ai_client.httpx.post", return_value=_mock_httpx_response(_VALID_CLOUD_RESPONSE)) as mock_post:
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                client.get_reasons(_make_game_state(game_phase="early"))
+                client.get_reasons(_make_game_state(game_phase="mid"))
+        assert mock_post.call_count == 2
+
+    def test_returns_null_reasons_when_cloud_api_unreachable(self):
+        client = AIClient()
+        with patch("analysis.ai_client.httpx.post", side_effect=Exception("Connection refused")):
+            with patch("analysis.ai_client.settings") as mock_settings:
+                mock_settings.cloud_api_url = "https://example.railway.app"
+                reasons = client.get_reasons(_make_game_state())
+        assert reasons == {"top": None, "mid": None, "bot": None}
+
+    def test_returns_null_reasons_when_cloud_api_url_not_set(self):
+        client = AIClient()
+        with patch("analysis.ai_client.settings") as mock_settings:
+            mock_settings.cloud_api_url = ""
+            reasons = client.get_reasons(_make_game_state())
+        assert reasons == {"top": None, "mid": None, "bot": None}

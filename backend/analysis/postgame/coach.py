@@ -14,7 +14,10 @@ import json
 import logging
 from typing import Any
 
-import anthropic
+# anthropic is imported lazily inside get_coaching_feedback() — it is no longer
+# bundled in the packaged app because AI calls were moved to the Railway cloud API.
+# The postgame endpoint still works when an ANTHROPIC_API_KEY is present locally
+# (dev / self-hosted), but gracefully returns [] when it is not.
 
 from analysis.postgame.events import GankEvent, ObjectiveEvent, PathingIssue
 from config import settings
@@ -61,19 +64,30 @@ def get_coaching_feedback(
         List of CoachingMoment sorted by game timestamp.
 
     Raises:
-        ValueError:           If Claude returns malformed JSON.
-        anthropic.APIError:   On API failure.
+        ValueError: If Claude returns malformed JSON.
     """
+    try:
+        import anthropic as _anthropic  # noqa: PLC0415
+    except ImportError:
+        logger.warning("anthropic package not available — postgame coaching disabled")
+        return []
+
+    api_key: str = getattr(settings, "anthropic_api_key", "")
+    ai_model: str = getattr(settings, "ai_model", "claude-sonnet-4-6")
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY not set — postgame coaching disabled")
+        return []
+
     events = _build_event_list(ganks, objectives, pathing, champion_name)
     if not events:
         logger.warning("No events to coach — returning empty list")
         return []
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = _anthropic.Anthropic(api_key=api_key)
     logger.info("Calling Claude for post-game coaching (%d events, %s)", len(events), champion_name)
 
     response = client.messages.create(
-        model=settings.ai_model,
+        model=ai_model,
         max_tokens=2048,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": _build_prompt(events, champion_name)}],

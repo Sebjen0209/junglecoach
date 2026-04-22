@@ -2,6 +2,7 @@
   "name": "junglecoach-overlay",
   "version": "0.1.0",
   "description": "JungleCoach real-time gank priority overlay",
+  "author": "JungleCoach",
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
@@ -11,18 +12,29 @@
     "appId": "gg.junglecoach.overlay",
     "productName": "JungleCoach",
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": "nsis"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
+      "target": "dmg"
     },
     "files": [
       "main.js",
       "preload.js",
       "renderer/**"
-    ]
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/junglecoach-backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "devDependencies": {
     "electron": "^36.0.0",

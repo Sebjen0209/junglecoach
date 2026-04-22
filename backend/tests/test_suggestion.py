@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from analysis.ai_client import AIClient
-from analysis.suggestion import _fallback_reasons, analyse, build_game_state
+from analysis.suggestion import analyse, build_game_state
 from capture.live_client import GameSnapshot, PlayerSnapshot
 from models import AnalysisResult, GameState, LaneState
 
@@ -293,38 +293,3 @@ class TestAnalyse:
         assert result.patch is not None
 
 
-# ---------------------------------------------------------------------------
-# _fallback_reasons
-# ---------------------------------------------------------------------------
-
-class TestFallbackReasons:
-    def test_all_three_lanes_covered(self):
-        gs = _game_state()
-        lane_scores = {"top": (30.0, "medium"), "mid": (10.0, "low"), "bot": (50.0, "high")}
-        reasons = _fallback_reasons(gs, lane_scores)
-        assert set(reasons.keys()) == {"top", "mid", "bot"}
-
-    def test_ally_champion_in_reason(self):
-        gs = _game_state()
-        lane_scores = {"top": (30.0, "medium"), "mid": (10.0, "low"), "bot": (50.0, "high")}
-        reasons = _fallback_reasons(gs, lane_scores)
-        assert "Darius" in reasons["top"]
-
-    def test_enemy_champion_in_reason(self):
-        gs = _game_state()
-        lane_scores = {"top": (30.0, "medium"), "mid": (10.0, "low"), "bot": (50.0, "high")}
-        reasons = _fallback_reasons(gs, lane_scores)
-        assert "Garen" in reasons["top"]
-
-    def test_winrate_percentage_in_reason(self):
-        gs = _game_state()
-        lane_scores = {"top": (30.0, "medium"), "mid": (10.0, "low"), "bot": (50.0, "high")}
-        reasons = _fallback_reasons(gs, lane_scores)
-        assert "55%" in reasons["top"]
-
-    def test_all_reasons_are_strings(self):
-        gs = _game_state()
-        lane_scores = {"top": (30.0, "medium"), "mid": (10.0, "low"), "bot": (50.0, "high")}
-        reasons = _fallback_reasons(gs, lane_scores)
-        for lane_name, reason in reasons.items():
-            assert isinstance(reason, str), f"Reason for {lane_name} is not a string"

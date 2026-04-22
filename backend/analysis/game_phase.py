@@ -19,7 +19,10 @@ Phase thresholds:
 import logging
 import re
 
-from PIL import Image, ImageOps, ImageFilter
+# PIL is only needed by the legacy OCR path (detect_game_phase).
+# The primary path (game_time_to_phase) has no external dependencies.
+# PIL is imported lazily inside the functions that need it so the module
+# can be imported in the packaged app where Pillow is not bundled.
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +69,9 @@ def game_time_to_phase(seconds: float) -> tuple[str, int]:
 _TESS_CONFIG = "--psm 7 -c tessedit_char_whitelist=0123456789:"
 
 
-def _preprocess_timer(img: Image.Image) -> Image.Image:
+def _preprocess_timer(img: "Image.Image") -> "Image.Image":
     """Prepare timer crop for Tesseract: grayscale, sharpen, threshold, upscale."""
+    from PIL import ImageOps, ImageFilter, Image  # noqa: PLC0415
     gray = ImageOps.grayscale(img)
     sharpened = gray.filter(ImageFilter.UnsharpMask(radius=1, percent=200, threshold=2))
     binary = sharpened.point(lambda p: 255 if p > 160 else 0)
@@ -87,7 +91,7 @@ def _parse_timer_text(raw: str) -> int | None:
     return None
 
 
-def detect_game_phase(timer_img: Image.Image) -> tuple[str, int]:
+def detect_game_phase(timer_img: "Image.Image") -> tuple[str, int]:
     """Detect game phase from a timer region screenshot (OCR-based, legacy).
 
     Prefer game_time_to_phase() when a live game is running. Use this only

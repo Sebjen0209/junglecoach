@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen, safeStorage } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -6,6 +7,49 @@ const WINDOW_WIDTH = 290;
 const WINDOW_HEIGHT_INITIAL = 160;
 
 let mainWindow = null;
+let backendProcess = null;
+
+// ── Backend process management ───────────────────────────────
+
+function getBackendExe() {
+  if (!app.isPackaged) return null; // Dev: backend is started manually
+  return path.join(
+    process.resourcesPath,
+    'backend',
+    'junglecoach-backend.exe',
+  );
+}
+
+function startBackend() {
+  const exe = getBackendExe();
+  if (!exe || !fs.existsSync(exe)) return;
+
+  backendProcess = spawn(exe, [], {
+    detached: false,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      CLOUD_API_URL: 'https://junglecoach-production.up.railway.app',
+      LOG_LEVEL: 'INFO',
+    },
+  });
+
+  backendProcess.on('error', (err) => {
+    console.error('[backend] Failed to start:', err.message);
+  });
+
+  backendProcess.on('exit', (code) => {
+    console.log('[backend] Exited with code', code);
+    backendProcess = null;
+  });
+}
+
+function stopBackend() {
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
+}
 
 function getTokenPath() {
   return path.join(app.getPath('userData'), 'session.enc');
@@ -49,10 +93,17 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  startBackend();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('will-quit', () => {
+  stopBackend();
 });
 
 app.on('activate', () => {
