@@ -379,7 +379,7 @@ function ChampionSection({ onAmbientChange }: { onAmbientChange: (h: number, s: 
     <section className="relative px-6 py-24 z-10">
       <div className="max-w-7xl mx-auto">
         <FadeIn className="text-center mb-12">
-          <p className="sub-heading text-xs text-[#00e5ff] tracking-[0.25em] mb-3">THE RIFT KNOWS</p>
+          <p className="sub-heading text-xs text-[#00e5ff] tracking-[0.25em] mb-3">JUNGLECOACH KNOWS EVERY MATCHUP</p>
           <h2 className="arcane-heading text-3xl md:text-4xl font-bold text-[#f0f2ff]">Every champion. Every matchup.</h2>
         </FadeIn>
 
@@ -571,8 +571,8 @@ function PricingSection() {
                   className="relative rounded-xl border h-full flex flex-col"
                   style={{
                     padding: plan.badge ? "2.5rem 1.5rem 1.5rem" : "1.5rem",
-                    background: "rgba(13,13,43,0.8)",
-                    borderColor: plan.highlight ? accent.border : "rgba(26,26,74,0.8)",
+                    background: "rgba(20,20,60,0.75)",
+                    borderColor: plan.highlight ? accent.border : "rgba(80,90,180,0.35)",
                     boxShadow: plan.highlight ? `0 0 50px ${accent.glow}` : "none",
                     backdropFilter: "blur(16px)",
                   }}
@@ -712,14 +712,20 @@ function DownloadSection() {
 
       <div className="max-w-3xl mx-auto text-center">
         <FadeIn>
-          <div
+          <motion.div
             className="relative rounded-2xl p-16 overflow-hidden border noise-overlay"
             style={{
-              background: "rgba(13,13,43,0.8)",
+              background: "rgba(20,20,60,0.75)",
               borderColor: "rgba(240,192,64,0.2)",
               backdropFilter: "blur(20px)",
               boxShadow: "0 0 80px rgba(240,192,64,0.08), 0 0 160px rgba(200,80,255,0.05)",
             }}
+            whileHover={{
+              borderColor: "rgba(240,192,64,0.45)",
+              boxShadow: "0 0 100px rgba(240,192,64,0.14), 0 0 160px rgba(200,80,255,0.07)",
+              y: -4,
+            }}
+            transition={{ duration: 0.3 }}
           >
             {/* Ambient glows */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[250px] rounded-full pointer-events-none" style={{ background: "radial-gradient(ellipse, rgba(240,192,64,0.08) 0%, transparent 70%)" }} />
@@ -754,7 +760,7 @@ function DownloadSection() {
                 <a href="#pricing" className="btn-arcane-ghost">View pricing</a>
               </div>
             </div>
-          </div>
+          </motion.div>
         </FadeIn>
       </div>
     </section>

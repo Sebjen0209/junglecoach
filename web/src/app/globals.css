@@ -113,8 +113,8 @@ body::after {
 
 /* ── Cards ────────────────────────────────────────────────────── */
 .arcane-card {
-  background: rgba(13, 13, 43, 0.7);
-  border: 1px solid var(--border);
+  background: rgba(20, 20, 60, 0.75);
+  border: 1px solid rgba(80, 90, 180, 0.35);
   border-radius: 1rem;
   backdrop-filter: blur(16px);
   transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
@@ -270,15 +270,15 @@ body::after {
 
 /* ── App page hover cards (server-component safe) ────────────── */
 .history-card {
-  background: rgba(13,13,43,0.7);
-  border: 1px solid rgba(26,26,74,0.8);
+  background: rgba(20,20,60,0.75);
+  border: 1px solid rgba(80,90,180,0.35);
   backdrop-filter: blur(12px);
   border-radius: 0.75rem;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .history-card:hover {
-  border-color: rgba(0,229,255,0.2);
-  box-shadow: 0 0 30px rgba(0,229,255,0.05);
+  border-color: rgba(0,229,255,0.35);
+  box-shadow: 0 0 30px rgba(0,229,255,0.07);
 }
 .history-card:hover .history-arrow {
   color: #00e5ff;

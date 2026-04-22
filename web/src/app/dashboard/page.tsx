@@ -46,8 +46,8 @@ export default async function DashboardPage() {
         }}
       >
         <div>
-          <p className="sub-heading text-[10px] tracking-[0.2em] mb-3" style={{ color: "#7986cb" }}>
-            CURRENT PLAN
+          <p className="sub-heading text-[11px] tracking-[0.15em] mb-3" style={{ color: "#c5cae9" }}>
+            YOUR PLAN
           </p>
           <SubscriptionStatus plan={plan} status={status} currentPeriodEnd={periodEnd} />
         </div>

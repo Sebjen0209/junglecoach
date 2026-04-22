@@ -46,15 +46,20 @@ export function SubscriptionStatus({
       </div>
 
       {effectiveStatus === "active" && periodDate && (
-        <p className="text-xs" style={{ color: "#7986cb" }}>Renews on {periodDate}</p>
+        <p className="text-xs" style={{ color: "#c5cae9" }}>
+          Next billing date: <span style={{ color: "#f0f2ff" }}>{periodDate}</span>
+        </p>
+      )}
+      {effectiveStatus === "active" && !periodDate && (
+        <p className="text-xs" style={{ color: "#7986cb" }}>Free plan — no billing, upgrade anytime.</p>
       )}
       {effectiveStatus === "cancelling" && periodDate && (
         <p className="text-xs" style={{ color: "rgba(240,192,64,0.7)" }}>
-          Access until {periodDate} — your subscription will not renew.
+          Access until <span style={{ color: "#f0c040" }}>{periodDate}</span> — will not renew.
         </p>
       )}
       {effectiveStatus === "cancelled" && (
-        <p className="text-xs" style={{ color: "#7986cb" }}>Your subscription has ended.</p>
+        <p className="text-xs" style={{ color: "#7986cb" }}>Subscription ended — upgrade to restore access.</p>
       )}
       {status === "past_due" && (
         <p className="text-xs" style={{ color: "rgba(255,51,102,0.8)" }}>

@@ -19,12 +19,12 @@ export default async function SettingsPage() {
         <div
           className="rounded-xl border overflow-hidden"
           style={{
-            background: "rgba(13,13,43,0.7)",
-            borderColor: "rgba(26,26,74,0.8)",
+            background: "rgba(20,20,60,0.75)",
+            borderColor: "rgba(80,90,180,0.35)",
             backdropFilter: "blur(16px)",
           }}
         >
-          <div className="px-6 py-5 border-b" style={{ borderColor: "rgba(26,26,74,0.8)" }}>
+          <div className="px-6 py-5 border-b" style={{ borderColor: "rgba(80,90,180,0.35)" }}>
             <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-5" style={{ color: "#7986cb" }}>
               ACCOUNT
             </p>

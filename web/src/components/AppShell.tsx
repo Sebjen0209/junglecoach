@@ -64,7 +64,7 @@ export function AppShell({ user, children }: AppShellProps) {
                   key={link.href}
                   href={link.href}
                   className="sub-heading text-xs tracking-widest transition-colors hover:text-white"
-                  style={{ color: isActive ? "#00e5ff" : "#c5cae9" }}
+                  style={{ color: isActive ? "#00e5ff" : "#f0f2ff" }}
                 >
                   {link.label}
                 </Link>
@@ -77,7 +77,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <form action="/api/auth/signout" method="POST">
               <button
                 type="submit"
-                className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest"
+                className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest py-3"
               >
                 Sign out
               </button>

@@ -44,7 +44,11 @@
       "Bash(taskkill /F /IM python.exe /T)",
       "Bash(netstat -ano)",
       "Bash(findstr \":8000\")",
-      "Bash(taskkill *)"
+      "Bash(taskkill *)",
+      "Bash(xargs ls *)",
+      "Bash(grep -v \":0$\")",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)"
     ]
   }
 }

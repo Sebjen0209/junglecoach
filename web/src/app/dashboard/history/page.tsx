@@ -29,8 +29,8 @@ export default async function HistoryPage() {
       <div
         className="rounded-xl p-6 border"
         style={{
-          background: "rgba(13,13,43,0.7)",
-          borderColor: "rgba(26,26,74,0.8)",
+          background: "rgba(20,20,60,0.75)",
+          borderColor: "rgba(80,90,180,0.35)",
           backdropFilter: "blur(16px)",
         }}
       >
@@ -56,7 +56,7 @@ export default async function HistoryPage() {
       {/* Past analyses */}
       <div>
         <div className="flex items-center gap-3 mb-4">
-          <p className="sub-heading text-[10px] font-bold tracking-[0.2em]" style={{ color: "#7986cb" }}>
+          <p className="sub-heading text-[11px] font-bold tracking-[0.15em]" style={{ color: "#c5cae9" }}>
             PAST ANALYSES
           </p>
           <span
