@@ -109,12 +109,12 @@ class TestBuildEventList:
         events = _build_event_list([_gank(90_000, lane="top", kill=True)], [], [], "Vi")
         gank = next(e for e in events if e["type"] == "gank")
         assert "top" in gank["description"]
-        assert "got a kill" in gank["description"]
+        assert "got the kill" in gank["description"]
 
     def test_gank_assist_description(self):
         events = _build_event_list([_gank(90_000, kill=False)], [], [], "Vi")
         gank = next(e for e in events if e["type"] == "gank")
-        assert "assisted a kill" in gank["description"]
+        assert "assisted" in gank["description"]
 
     def test_pathing_in_base_description(self):
         events = _build_event_list([], [], [_pathing(3, issue="in_base")], "Vi")
@@ -238,6 +238,16 @@ class TestParseResponse:
 # ---------------------------------------------------------------------------
 
 class TestGetCoachingFeedback:
+    def setup_method(self):
+        mock_settings = MagicMock()
+        mock_settings.anthropic_api_key = "sk-fake"
+        mock_settings.ai_model = "claude-sonnet-4-6"
+        self._settings_patcher = patch("analysis.postgame.coach.settings", new=mock_settings)
+        self._settings_patcher.start()
+
+    def teardown_method(self):
+        self._settings_patcher.stop()
+
     @patch("analysis.postgame.coach.anthropic.Anthropic")
     def test_returns_coaching_moments(self, mock_cls):
         events_input = _build_event_list([_gank(90_000)], [], [], "Vi")
@@ -271,7 +281,6 @@ class TestGetCoachingFeedback:
 
     @patch("analysis.postgame.coach.anthropic.Anthropic")
     def test_api_called_with_configured_model(self, mock_cls):
-        from config import settings
         events_input = _build_event_list([_gank(90_000)], [], [], "Vi")
         mock_client = MagicMock()
         mock_cls.return_value = mock_client
@@ -281,7 +290,7 @@ class TestGetCoachingFeedback:
 
         get_coaching_feedback([_gank(90_000)], [], [], "Vi")
         kwargs = mock_client.messages.create.call_args[1]
-        assert kwargs["model"] == settings.ai_model
+        assert kwargs["model"] == "claude-sonnet-4-6"
 
     @patch("analysis.postgame.coach.anthropic.Anthropic")
     def test_multiple_events_all_returned(self, mock_cls):

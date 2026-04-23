@@ -263,4 +263,26 @@ git tag vX.Y.Z && git push origin vX.Y.Z
 
 ---
 
+## 2026-04-23 — Macro phase live analysis (post-laning awareness)
+
+**Decision**: Extended live analysis beyond laning phase. Once any outer tower falls (or game passes 20 min), the overlay switches from gank priority cards to macro awareness hints covering objective timing, lane rotation context, and upcoming decisions.
+
+**Key design choices**:
+- **Mode switch trigger**: any outer tower down OR game_time ≥ 20:00. Detected by parsing the `events` array already returned by `/liveclientdata/allgamedata` — no new API calls needed.
+- **Tower attribution**: first tower kill per (team, lane) = outer tower gone. `Turret_T{1|2}_{L|C|R}_*` name parsed to extract team and lane.
+- **Objective timers**: dragon (first 5:00, respawn +5min), baron (first 20:00, respawn +6min), herald (8:00–19:45). All computed client-side from event timestamps — no server round-trip for timer data.
+- **Riot compliance**: hints are framed as awareness ("Dragon in 67s — tied 2-2"), never as instructions. This satisfies the "highlight decisions, give multiple choices" policy. Post-game analysis can be more specific (retrospective).
+- **Free vs premium**: free users see `macro_hints: null` (no Claude call). The mode switch itself (laning → macro) happens for everyone. Premium/pro get 2-3 Claude-generated awareness points.
+- **Caching**: macro hints cached 60s minimum; state-key (tower + dragon stack + baron bucket) busts cache on meaningful changes.
+- **Cloud API**: new `POST /analysis/macro` endpoint on Railway, same auth pattern as `/analysis/reasons`.
+
+**Alternatives considered**:
+- Extending laning mode past 20 min (poor UX — gank priority is meaningless once towers fall)
+- Client-side macro logic only, no Claude (cheaper but advice is generic; premium feel requires contextual reasoning)
+- Separate overlay view for macro (deferred to Person 2 — API contract updated)
+
+**Impact**:
+- Person 1 — implemented. New files: `analysis/macro_state.py`. Modified: `live_client.py` (MacroSnapshot), `models.py` (MacroHint, AnalysisResult), `analysis/ai_client.py`, `analysis/suggestion.py`, `cloud_api/routers/analysis.py`.
+- Person 2 — overlay must check `analysis_mode` field and render `MacroHint` cards when `"macro"`. See updated `api-contract.md` for full spec and rendering guide. **This is a breaking change in the overlay logic** — the existing lane card renderer stays, a new macro card renderer is needed.
+
 _Add new decisions below this line_

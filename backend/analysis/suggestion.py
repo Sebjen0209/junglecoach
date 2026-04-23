@@ -16,11 +16,12 @@ from datetime import datetime, timezone
 from analysis.ai_client import AIClient
 from analysis.experience import experience_delta
 from analysis.game_phase import game_time_to_phase
+from analysis.macro_state import build_macro_context, is_macro_mode, macro_state_key
 from analysis.scorer import score_lane, score_to_priority
 from capture.live_client import GameSnapshot, PlayerSnapshot
 from config import settings
 from data.db import get_matchup_winrate, get_phase_strength
-from models import AnalysisResult, GameState, LaneSuggestion, LaneState, PlayerProfile
+from models import AnalysisResult, GameState, LaneSuggestion, LaneState, MacroHint, PlayerProfile
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,51 @@ def analyse(
 
     phase, game_minute = game_time_to_phase(snapshot.game_time_seconds)
 
+    # ------------------------------------------------------------------
+    # Route: macro mode vs laning mode
+    # ------------------------------------------------------------------
+
+    if is_macro_mode(snapshot):
+        return _analyse_macro(snapshot, ai_client, game_minute, jwt)
+
+    return _analyse_laning(snapshot, ai_client, player_profiles, game_minute, phase, jwt)
+
+
+def _analyse_macro(
+    snapshot: GameSnapshot,
+    ai_client: AIClient,
+    game_minute: int,
+    jwt: str | None,
+) -> AnalysisResult:
+    """Build a macro-mode result with objective awareness hints."""
+    context = build_macro_context(snapshot)
+    key = macro_state_key(snapshot)
+
+    try:
+        hints: list[MacroHint] = ai_client.get_macro_hints(context, key, jwt=jwt)
+    except Exception as exc:
+        logger.warning("Macro hints failed: %s", exc)
+        hints = []
+
+    return AnalysisResult(
+        game_detected=True,
+        game_minute=game_minute,
+        patch=settings.current_patch,
+        analysed_at=datetime.now(timezone.utc).isoformat(),
+        analysis_mode="macro",
+        macro_hints=hints or None,
+    )
+
+
+def _analyse_laning(
+    snapshot: GameSnapshot,
+    ai_client: AIClient,
+    player_profiles: dict[str, PlayerProfile] | None,
+    game_minute: int,
+    phase: str,
+    jwt: str | None,
+) -> AnalysisResult:
+    """Build a laning-mode result with per-lane gank priority scores."""
     # Map profiles from summoner_name → role for experience delta calculation.
     exp_deltas = _compute_experience_deltas(snapshot, player_profiles or {})
 
@@ -159,7 +205,17 @@ def analyse(
         lane_scores[lane_name] = (score, priority)
 
     # Get AI reasons from cloud API (cached if state is unchanged)
-    reasons = ai_client.get_reasons(game_state, jwt=jwt)
+    try:
+        reasons = ai_client.get_reasons(game_state, jwt=jwt)
+    except Exception as exc:
+        logger.warning("AI client failed, using scorer fallback: %s", exc)
+        reasons = {
+            lane_name: (
+                f"{getattr(game_state, lane_name).ally_champion} vs "
+                f"{getattr(game_state, lane_name).enemy_champion}"
+            )
+            for lane_name in _GANK_LANES
+        }
 
     # Assemble final result
     lanes: dict[str, LaneSuggestion] = {}
@@ -180,6 +236,7 @@ def analyse(
         game_minute=game_minute,
         patch=settings.current_patch,
         analysed_at=datetime.now(timezone.utc).isoformat(),
+        analysis_mode="laning",
         lanes=lanes,
     )
 

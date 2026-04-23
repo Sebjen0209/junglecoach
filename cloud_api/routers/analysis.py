@@ -16,7 +16,7 @@ import logging
 from typing import Literal
 
 import anthropic
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,19 @@ You are a League of Legends jungle coaching assistant.
 You receive structured data about all 3 lanes and must output gank priority advice.
 Be concise. Maximum 2 sentences per lane. Focus on WHY, not just the priority.
 Output valid JSON only — no markdown, no explanation outside the JSON.\
+"""
+
+_MACRO_SYSTEM_PROMPT = """\
+You are a League of Legends game-awareness assistant for a jungler.
+
+Your role is to highlight what is important right now and flag upcoming decisions.
+Do NOT give direct instructions or tell the player what to do.
+State what is happening, what is coming up, and what decisions may be relevant.
+Players make their own choices — your role is to make sure they are informed.
+
+Riot compliance: frame all points as awareness and context, never as commands.
+Maximum 2 sentences per hint. Keep headlines under 8 words.
+Output valid JSON only — no markdown, no explanation outside the JSON array.\
 """
 
 _PREMIUM_PLANS = frozenset({"premium", "premium_monthly", "premium_annual", "pro", "pro_monthly"})
@@ -63,6 +76,21 @@ class ReasonsResponse(BaseModel):
     top: str | None
     mid: str | None
     bot: str | None
+
+
+class _MacroRequest(BaseModel):
+    context: str   # structured game-state block from macro_state.build_macro_context()
+
+
+class _MacroHintItem(BaseModel):
+    type: Literal["objective", "lane", "trade", "state"]
+    urgency: Literal["critical", "high", "medium"]
+    headline: str
+    detail: str
+
+
+class MacroResponse(BaseModel):
+    hints: list[_MacroHintItem]
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +204,74 @@ def post_reasons(
     except Exception as exc:
         logger.error("Claude call failed: %s", exc)
         return ReasonsResponse(top=None, mid=None, bot=None)
+
+
+# ---------------------------------------------------------------------------
+# Macro awareness endpoint
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/macro",
+    response_model=MacroResponse,
+    summary="Get macro awareness hints for mid/late game (premium only)",
+)
+def post_macro(
+    request: _MacroRequest,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> MacroResponse:
+    """Called by the local backend once laning phase has ended.
+
+    Free users receive an empty hints list — no Claude call is made.
+    Premium/Pro users receive 2-3 Claude-generated awareness points covering
+    objective timing, lane state, and upcoming macro decisions.
+
+    Riot compliance: all hints are framed as awareness, never as instructions.
+    """
+    plan = _get_plan(creds)
+
+    if plan not in _PREMIUM_PLANS:
+        logger.debug("Free user — skipping macro Claude call")
+        return MacroResponse(hints=[])
+
+    try:
+        hints = _call_claude_macro(request.context)
+        logger.info("Claude macro hints generated (plan=%s count=%d)", plan, len(hints))
+        return MacroResponse(hints=hints)
+    except Exception as exc:
+        logger.error("Claude macro call failed: %s", exc)
+        return MacroResponse(hints=[])
+
+
+def _call_claude_macro(context: str) -> list[_MacroHintItem]:
+    """Call Claude with the macro game-state context and parse the response."""
+    user_message = (
+        f"{context}\n\n"
+        "Provide 2-3 awareness points for the jungler right now.\n"
+        "Return a JSON array in exactly this format:\n"
+        '[\n'
+        '  {\n'
+        '    "type": "objective|lane|trade|state",\n'
+        '    "urgency": "critical|high|medium",\n'
+        '    "headline": "Short headline (max 8 words)",\n'
+        '    "detail": "Two sentences. What this situation means and why it matters."\n'
+        '  }\n'
+        ']'
+    )
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    response = client.messages.create(
+        model=settings.ai_model,
+        max_tokens=512,
+        system=_MACRO_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0]
+
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise ValueError(f"Expected JSON array from Claude macro, got {type(data).__name__}")
+
+    return [_MacroHintItem(**item) for item in data]

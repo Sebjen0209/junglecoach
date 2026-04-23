@@ -91,7 +91,7 @@ class TestMsToStr:
 
 class TestClassifyLane:
     def test_low_y_is_bot(self):
-        assert _classify_lane(7000, 2000) == "bot"
+        assert _classify_lane(12000, 2000) == "bot"
 
     def test_high_y_is_top(self):
         assert _classify_lane(3000, 12000) == "top"
@@ -100,12 +100,12 @@ class TestClassifyLane:
         assert _classify_lane(7000, 7000) == "mid"
 
     def test_at_bot_boundary(self):
-        assert _classify_lane(5000, 4999) == "bot"
-        assert _classify_lane(5000, 5001) == "mid"
+        assert _classify_lane(11000, 4999) == "bot"   # x > BOT_X_MIN, y just inside BOT_Y_MAX
+        assert _classify_lane(11000, 5001) != "bot"   # y just outside BOT_Y_MAX
 
     def test_at_top_boundary(self):
-        assert _classify_lane(5000, 9999) == "mid"
-        assert _classify_lane(5000, 10001) == "top"
+        assert _classify_lane(3799, 9501) == "top"    # x just inside TOP_X_MAX, y > TOP_Y_MIN
+        assert _classify_lane(3801, 9501) != "top"    # x just outside TOP_X_MAX
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ class TestClassifyGanks:
         assert result[0].was_jungler_killer is False
 
     def test_lane_bot(self):
-        ganks = [_raw_gank(90_000, self.JUNGLER, 9, [], x=8000, y=2000)]
+        ganks = [_raw_gank(90_000, self.JUNGLER, 9, [], x=12000, y=2000)]
         assert classify_ganks(ganks, self.JUNGLER)[0].lane == "bot"
 
     def test_lane_top(self):

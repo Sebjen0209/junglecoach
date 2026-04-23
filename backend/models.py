@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,22 @@ class LaneSuggestion(BaseModel):
     score: float
 
 
+class MacroHint(BaseModel):
+    """A single macro awareness point shown during mid/late game."""
+
+    type: Literal["objective", "lane", "trade", "state"]
+    urgency: Literal["critical", "high", "medium"]
+    headline: str   # Short — rendered bold in the overlay (max ~8 words)
+    detail: str     # 2 sentences of context — what it means and why it matters
+
+    @field_validator("headline")
+    @classmethod
+    def headline_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("headline must not be empty")
+        return v
+
+
 class AnalysisResult(BaseModel):
     """Full response payload for GET /analysis."""
 
@@ -61,7 +77,11 @@ class AnalysisResult(BaseModel):
     game_minute: int | None = None
     patch: str | None = None
     analysed_at: str | None = None
+    # Laning mode (all outer towers up)
     lanes: dict[str, LaneSuggestion] | None = None
+    # Macro mode (any outer tower down or 20+ min)
+    analysis_mode: Literal["laning", "macro"] | None = None
+    macro_hints: list[MacroHint] | None = None
 
 
 class CoachingMoment(BaseModel):

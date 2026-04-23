@@ -5,8 +5,15 @@ export interface LaneData {
   enemy_champion: string;
   matchup_winrate: number;
   priority: "high" | "medium" | "low";
-  reason: string;
+  reason: string | null;
   score: number;
+}
+
+export interface MacroHint {
+  type: "objective" | "lane" | "trade" | "state";
+  urgency: "critical" | "high" | "medium";
+  headline: string;
+  detail: string;
 }
 
 export interface AnalysisResponse {
@@ -14,11 +21,13 @@ export interface AnalysisResponse {
   game_minute: number | null;
   patch: string | null;
   analysed_at: string | null;
+  analysis_mode: "laning" | "macro" | null;
   lanes: {
     top: LaneData;
     mid: LaneData;
     bot: LaneData;
   } | null;
+  macro_hints: MacroHint[] | null;
 }
 
 export interface SubscriptionCheckResponse {

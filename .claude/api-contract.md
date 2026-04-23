@@ -57,13 +57,14 @@ Returns the current League of Legends client lifecycle phase and capture status.
 Returns the latest gank priority analysis. This is the main endpoint.
 The overlay polls this every 5 seconds.
 
-**Response 200 — game in progress**
+**Response 200 — laning phase (all outer towers standing, < 20 min)**
 ```json
 {
   "game_detected": true,
   "game_minute": 12,
   "patch": "14.6",
   "analysed_at": "2024-03-15T14:23:05Z",
+  "analysis_mode": "laning",
   "lanes": {
     "top": {
       "ally_champion": "Riven",
@@ -78,7 +79,7 @@ The overlay polls this every 5 seconds.
       "enemy_champion": "Zed",
       "matchup_winrate": 0.46,
       "priority": "medium",
-      "reason": "Azir is weak early but a monster late. Gank once to keep him safe — +30% win rate if ahead at 20 min.",
+      "reason": "Azir is weak early but a monster late. Gank once to keep him safe.",
       "score": 28.1
     },
     "bot": {
@@ -86,10 +87,43 @@ The overlay polls this every 5 seconds.
       "enemy_champion": "Caitlyn",
       "matchup_winrate": 0.51,
       "priority": "low",
-      "reason": "Even matchup. Spend time elsewhere unless they push hard.",
+      "reason": "Even matchup. Other lanes have more to offer right now.",
       "score": 8.0
     }
-  }
+  },
+  "macro_hints": null
+}
+```
+
+**Response 200 — macro phase (any outer tower down OR ≥ 20 min)**
+```json
+{
+  "game_detected": true,
+  "game_minute": 19,
+  "patch": "14.6",
+  "analysed_at": "2024-03-15T14:35:12Z",
+  "analysis_mode": "macro",
+  "lanes": null,
+  "macro_hints": [
+    {
+      "type": "objective",
+      "urgency": "critical",
+      "headline": "Dragon in 67s — tied 2-2",
+      "detail": "Both teams are equal on stacks. This spawn is significant for both sides."
+    },
+    {
+      "type": "lane",
+      "urgency": "high",
+      "headline": "Enemy bot lane has map freedom",
+      "detail": "With their outer down, bot and support have more options. Mid may see additional presence."
+    },
+    {
+      "type": "objective",
+      "urgency": "medium",
+      "headline": "Baron comes online in ~90s",
+      "detail": "Teams typically begin baron-related decisions 2 minutes before spawn."
+    }
+  ]
 }
 ```
 
@@ -100,7 +134,9 @@ The overlay polls this every 5 seconds.
   "game_minute": null,
   "patch": null,
   "analysed_at": null,
-  "lanes": null
+  "analysis_mode": null,
+  "lanes": null,
+  "macro_hints": null
 }
 ```
 
@@ -109,15 +145,39 @@ The overlay polls this every 5 seconds.
 | Field | Type | Description |
 |---|---|---|
 | `game_detected` | bool | Is a live game in progress |
-| `game_minute` | int \| null | Estimated game minute from OCR |
+| `game_minute` | int \| null | Current game minute |
 | `patch` | string \| null | Current patch version |
 | `analysed_at` | ISO string \| null | When the analysis was last run |
-| `lanes.{lane}.ally_champion` | string | Ally champion name (exact, from champions.json) |
+| `analysis_mode` | `"laning"` \| `"macro"` \| null | Which mode is active. Overlay should branch on this. |
+| `lanes` | object \| null | Populated in laning mode only |
+| `lanes.{lane}.ally_champion` | string | Ally champion name |
 | `lanes.{lane}.enemy_champion` | string | Enemy champion name |
-| `lanes.{lane}.matchup_winrate` | float | 0.0–1.0, ally's win rate in this matchup |
+| `lanes.{lane}.matchup_winrate` | float | 0.0–1.0, ally win rate in this matchup |
 | `lanes.{lane}.priority` | string | `"high"` \| `"medium"` \| `"low"` |
-| `lanes.{lane}.reason` | string | 1–2 sentence natural language explanation |
-| `lanes.{lane}.score` | float | Raw internal score (for debugging) |
+| `lanes.{lane}.reason` | string \| null | 1–2 sentence explanation (null for free users) |
+| `lanes.{lane}.score` | float | Raw score (for debugging) |
+| `macro_hints` | array \| null | Populated in macro mode, premium only. null for free users or laning mode. |
+| `macro_hints[].type` | string | `"objective"` \| `"lane"` \| `"trade"` \| `"state"` |
+| `macro_hints[].urgency` | string | `"critical"` \| `"high"` \| `"medium"` |
+| `macro_hints[].headline` | string | Short bold text for the overlay card (≤ 8 words) |
+| `macro_hints[].detail` | string | 2 sentences of context |
+
+### Overlay rendering guide
+
+```
+if analysis_mode == "laning":
+    render lane cards (existing behaviour)
+elif analysis_mode == "macro":
+    if macro_hints is null or empty:
+        render "Macro phase — upgrade for awareness hints" (free upsell)
+    else:
+        render MacroHint cards (urgency colour, headline bold, detail below)
+```
+
+Urgency colours (suggestion):
+- `critical` → red / pulsing
+- `high` → orange
+- `medium` → grey / dim
 
 ---
 
@@ -180,5 +240,6 @@ Common error codes:
 |---|---|---|
 | 0.1.0 | 2024-03-01 | Initial contract |
 | 0.2.0 | 2026-04-15 | `/status` — added `lol_phase` field; overlay should use this instead of `lol_running` for UI state |
+| 0.3.0 | 2026-04-23 | `/analysis` — added `analysis_mode` and `macro_hints` fields. Overlay must branch on `analysis_mode`. New `POST /analysis/macro` on Railway (internal, called by backend). |
 
 When you bump the version, add a row here and update both sides.

@@ -48,7 +48,7 @@
       "Bash(xargs ls *)",
       "Bash(grep -v \":0$\")",
       "Bash(npx tsc *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
       "Bash(python3 -c ' *)"
     ]
   }

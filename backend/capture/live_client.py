@@ -23,6 +23,16 @@ _ALL_GAME_DATA_URL = "https://127.0.0.1:2999/liveclientdata/allgamedata"
 # Must complete well within one capture cycle. The API is local so 2s is generous.
 _TIMEOUT = 2.0
 
+# Lane letter → internal lane name (used when parsing tower kill event names).
+_LANE_MAP: dict[str, str] = {"L": "top", "C": "mid", "R": "bot"}
+
+# Objective timing constants (seconds, patch-stable values).
+_HERALD_DESPAWN_TIME = 19 * 60 + 45   # Herald disappears at 19:45 if not killed
+_FIRST_DRAGON_SPAWN  = 5 * 60         # Dragon first appears at 5:00
+_DRAGON_RESPAWN      = 5 * 60         # Dragon respawns 5 min after each kill
+_FIRST_BARON_SPAWN   = 20 * 60        # Baron first appears at 20:00
+_BARON_RESPAWN       = 6 * 60         # Baron respawns 6 min after kill
+
 # Maps the API's position strings to our internal role names.
 # Riot uses "UTILITY" for the support role.
 _POSITION_MAP: dict[str, str] = {
@@ -40,6 +50,41 @@ _KILL_PRESSURE_SPELLS = frozenset({"SummonerDot"})  # Ignite
 
 # Ult is available for most champions from level 6.
 _ULT_AVAILABLE_LEVEL = 6
+
+
+@dataclass
+class MacroSnapshot:
+    """Objective and tower state derived from the Live Client events array.
+
+    Drives macro-mode analysis once the laning phase has broken down.
+    All data comes from public game events — no fog-of-war information.
+
+    dragon_spawn_in / baron_spawn_in semantics:
+      None  → objective is currently alive on the map (or baron not yet spawned
+              and past spawn time)
+      float → seconds until the objective spawns / respawns
+    """
+
+    ally_outer_down: dict[str, bool]    # {"top": T/F, "mid": T/F, "bot": T/F}
+    enemy_outer_down: dict[str, bool]
+    ally_dragon_stacks: int
+    enemy_dragon_stacks: int
+    dragon_spawn_in: float | None
+    baron_spawn_in: float | None
+    herald_available: bool
+
+
+def _default_macro() -> MacroSnapshot:
+    """Return a clean MacroSnapshot used as the default when events cannot be parsed."""
+    return MacroSnapshot(
+        ally_outer_down={"top": False, "mid": False, "bot": False},
+        enemy_outer_down={"top": False, "mid": False, "bot": False},
+        ally_dragon_stacks=0,
+        enemy_dragon_stacks=0,
+        dragon_spawn_in=None,
+        baron_spawn_in=None,
+        herald_available=True,
+    )
 
 
 @dataclass
@@ -71,6 +116,7 @@ class GameSnapshot:
     enemy_players: list[PlayerSnapshot]  # 5 players on the enemy team
     game_time_seconds: float             # raw game clock, e.g. 845.3
     game_mode: str                       # "CLASSIC" | "ARAM" | "PRACTICETOOL" | etc.
+    macro: MacroSnapshot = field(default_factory=_default_macro)
 
     def ally_roles(self) -> dict[str, str]:
         """Return {role: champion_name} for the ally team."""
@@ -187,12 +233,23 @@ def _parse_snapshot(data: dict) -> "GameSnapshot | None":
             len(enemy_players),
         )
 
+    # Build summoner→team map so dragon kills can be attributed to the right team.
+    summoner_team_map: dict[str, str] = {
+        p["summonerName"]: str(p.get("team", ""))
+        for p in all_players
+        if "summonerName" in p
+    }
+
+    events: list[dict] = data.get("events", {}).get("Events", [])
+    macro = _parse_macro_snapshot(events, game_time, ally_team, summoner_team_map)
+
     return GameSnapshot(
         ally_team=ally_team,
         ally_players=ally_players,
         enemy_players=enemy_players,
         game_time_seconds=game_time,
         game_mode=game_mode,
+        macro=macro,
     )
 
 
@@ -241,6 +298,97 @@ def _parse_player(raw: dict) -> "PlayerSnapshot | None":
             exc,
         )
         return None
+
+
+def _parse_macro_snapshot(
+    events: list[dict],
+    game_time: float,
+    ally_team: str,
+    summoner_team_map: dict[str, str],
+) -> MacroSnapshot:
+    """Build MacroSnapshot from the raw events array and current game clock.
+
+    Tower names follow the pattern ``Turret_T{team}_{lane}_{tier}_A`` where
+    team is T1 (ORDER/blue) or T2 (CHAOS/red), lane is L/C/R, and tier
+    increases toward the base (outer towers are typically the first to fall
+    per lane, so we treat the first kill per (team, lane) as the outer).
+    """
+    ally_t = "T1" if ally_team == "ORDER" else "T2"
+    enemy_t = "T2" if ally_team == "ORDER" else "T1"
+
+    ally_tower_kills:  dict[str, int] = {"top": 0, "mid": 0, "bot": 0}
+    enemy_tower_kills: dict[str, int] = {"top": 0, "mid": 0, "bot": 0}
+
+    dragon_kills: list[tuple[float, str]] = []   # (timestamp, killer_team)
+    baron_kills:  list[float] = []
+    herald_killed = False
+
+    for event in events:
+        ename = event.get("EventName", "")
+
+        if ename == "TurretKilled":
+            turret = event.get("TurretKilled", "")
+            parts = turret.split("_")
+            # ["Turret", "T1", "L", "03", "A"] — lane is index 2
+            if len(parts) >= 4:
+                team_part = parts[1]
+                lane = _LANE_MAP.get(parts[2])
+                if lane is not None:
+                    if team_part == ally_t:
+                        ally_tower_kills[lane] += 1
+                    elif team_part == enemy_t:
+                        enemy_tower_kills[lane] += 1
+
+        elif ename == "DragonKill":
+            kill_time = float(event.get("EventTime", 0))
+            killer_team = summoner_team_map.get(event.get("KillerName", ""), "")
+            dragon_kills.append((kill_time, killer_team))
+
+        elif ename == "HeraldKill":
+            herald_killed = True
+
+        elif ename == "BaronKill":
+            baron_kills.append(float(event.get("EventTime", 0)))
+
+    ally_outer_down  = {lane: count > 0 for lane, count in ally_tower_kills.items()}
+    enemy_outer_down = {lane: count > 0 for lane, count in enemy_tower_kills.items()}
+
+    ally_dragon_stacks  = sum(1 for _, team in dragon_kills if team == ally_team)
+    enemy_dragon_stacks = sum(1 for _, team in dragon_kills if team and team != ally_team)
+
+    return MacroSnapshot(
+        ally_outer_down=ally_outer_down,
+        enemy_outer_down=enemy_outer_down,
+        ally_dragon_stacks=ally_dragon_stacks,
+        enemy_dragon_stacks=enemy_dragon_stacks,
+        dragon_spawn_in=_calc_dragon_spawn(dragon_kills, game_time),
+        baron_spawn_in=_calc_baron_spawn(baron_kills, game_time),
+        herald_available=not herald_killed and game_time < _HERALD_DESPAWN_TIME,
+    )
+
+
+def _calc_dragon_spawn(
+    dragon_kills: list[tuple[float, str]], game_time: float
+) -> float | None:
+    """Return seconds until next dragon is available, or None if it is alive now."""
+    if not dragon_kills:
+        remaining = _FIRST_DRAGON_SPAWN - game_time
+        return max(0.0, remaining) if remaining > 0 else None
+    last_kill_time = max(t for t, _ in dragon_kills)
+    remaining = (last_kill_time + _DRAGON_RESPAWN) - game_time
+    return max(0.0, remaining) if remaining > 0 else None
+
+
+def _calc_baron_spawn(baron_kills: list[float], game_time: float) -> float | None:
+    """Return seconds until baron spawns/respawns, or None if it is alive now."""
+    if not baron_kills:
+        # Baron not yet killed — is it spawned?
+        if game_time < _FIRST_BARON_SPAWN:
+            return _FIRST_BARON_SPAWN - game_time   # counting down to first spawn
+        return None  # baron is alive and has never been killed
+    last_kill_time = max(baron_kills)
+    remaining = (last_kill_time + _BARON_RESPAWN) - game_time
+    return max(0.0, remaining) if remaining > 0 else None
 
 
 def _parse_summoner_spells(raw_spells: dict) -> frozenset[str]:

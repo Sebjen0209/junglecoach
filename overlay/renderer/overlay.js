@@ -179,7 +179,14 @@ async function fetchAnalysis() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    if (data.game_detected && data.lanes) {
+    if (!data.game_detected) {
+      fetchStatus();
+      return;
+    }
+
+    if (data.analysis_mode === 'macro') {
+      renderMacro(data);
+    } else if (data.lanes) {
       renderLanes(data);
     } else {
       fetchStatus();
@@ -272,6 +279,42 @@ function renderLanes(data) {
     });
   });
 
+  syncHeight();
+}
+
+function renderMacro(data) {
+  const isPremium = userPlan === 'premium' || userPlan === 'pro';
+  const hints = data.macro_hints;
+
+  const minuteHTML = data.game_minute != null
+    ? `<span class="meta-item">Min&nbsp;${data.game_minute}</span>` : '';
+  const patchHTML = data.patch
+    ? `<span class="meta-item">Patch&nbsp;${escapeHtml(data.patch)}</span>` : '';
+  const refreshHTML = `<span class="meta-item meta-refresh">${isPremium ? '5s' : '10s'}</span>`;
+  const modeHTML = `<span class="meta-item meta-mode">MACRO</span>`;
+
+  let bodyHTML;
+  if (!isPremium || !hints || hints.length === 0) {
+    bodyHTML = `<div class="macro-upsell">Upgrade for macro awareness hints</div>`;
+  } else {
+    const cardsHTML = hints.map((h) => {
+      const urgency = (h.urgency || 'medium').toLowerCase();
+      return `
+        <div class="macro-card urgency-${urgency}">
+          <div class="macro-header">
+            <span class="macro-type">${escapeHtml(h.type.toUpperCase())}</span>
+            <span class="macro-headline">${escapeHtml(h.headline)}</span>
+          </div>
+          <div class="macro-detail">${escapeHtml(h.detail)}</div>
+        </div>`;
+    }).join('');
+    bodyHTML = `<div class="macro-hints">${cardsHTML}</div>`;
+  }
+
+  content.innerHTML = `
+    <div class="meta-row">${minuteHTML}${patchHTML}${modeHTML}<span class="meta-spacer"></span>${refreshHTML}</div>
+    ${bodyHTML}
+  `;
   syncHeight();
 }
 
