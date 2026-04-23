@@ -76,6 +76,7 @@ class RawObjective:
     killer_team_id: int
     jungler_x: int
     jungler_y: int
+    jungler_was_killer: bool = False  # True when the jungler got the smite/kill
 
 
 @dataclass
@@ -99,6 +100,8 @@ class JunglerTimelineData:
     objectives: list[RawObjective] = field(default_factory=list)
     wards: list[RawWard] = field(default_factory=list)
     death_timestamps: list[int] = field(default_factory=list)
+    # (timestamp_ms, killer_team_id) for each Void Grub kill (monsterType HORDE)
+    void_grub_kills: list[tuple[int, int]] = field(default_factory=list)
     # participantId → {champion, role, team_id} — built at extraction time
     participant_info: dict = field(default_factory=dict)
 
@@ -249,12 +252,18 @@ def _handle_champion_kill(event: dict, data: JunglerTimelineData) -> None:
 
 def _handle_objective(event: dict, data: JunglerTimelineData, match_data: dict) -> None:
     monster = event.get("monsterType", "")
+    ts = event["timestamp"]
+    killer_id = event.get("killerId", 0)
+
+    if monster == "HORDE":
+        killer_team = _team_of(match_data, killer_id)
+        data.void_grub_kills.append((ts, killer_team))
+        return
+
     if monster not in ("DRAGON", "BARON_NASHOR", "RIFTHERALD"):
         return
 
-    ts = event["timestamp"]
     j_pos = _position_at(data.position_frames, ts)
-    killer_id = event.get("killerId", 0)
     killer_team = _team_of(match_data, killer_id)
 
     data.objectives.append(RawObjective(
@@ -264,6 +273,7 @@ def _handle_objective(event: dict, data: JunglerTimelineData, match_data: dict) 
         killer_team_id=killer_team,
         jungler_x=j_pos[0],
         jungler_y=j_pos[1],
+        jungler_was_killer=(killer_id == data.participant_id),
     ))
 
 
