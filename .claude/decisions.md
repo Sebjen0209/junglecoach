@@ -221,4 +221,46 @@ contract or overlay.
 
 ---
 
+## 2026-04-22 — Package backend as PyInstaller exe bundled in the Electron installer
+
+**Decision**: The Python backend is compiled into a self-contained folder by PyInstaller (`junglecoach.spec`, one-folder mode) and bundled into the Electron installer via `electron-builder`'s `extraResources`. The Electron main process spawns and kills the backend exe automatically. Users install one `.exe` — no Python required.
+
+**Why**: Users cannot be expected to install Python, create a venv, or run terminal commands. A single installer is the only viable distribution path for a consumer product.
+
+**Key implementation details**:
+- `backend/junglecoach.spec` — PyInstaller spec; includes `champions.json` + `power_spikes.json`; excludes `anthropic`, `PIL`, `winocr`, dev tools.
+- `backend/main.py` frozen-mode block runs **before any imports**: `os.chdir` to exe dir, `os.makedirs("data")`, attaches a `FileHandler` directly to the root logger (not `basicConfig` — PyInstaller's bootstrap can already claim that). `log_config=None` is passed to `uvicorn.run()` to prevent uvicorn from wiping our handler.
+- The `app` object is passed directly to `uvicorn.run()` (not the string `"server:app"`) because PyInstaller's frozen importer handles `from server import app` correctly but uvicorn's string-based importer cannot find filesystem modules at runtime.
+- `analysis/game_phase.py` — PIL import moved inside `detect_game_phase()` (legacy OCR path only); `game_time_to_phase()` has no external deps and loads cleanly without Pillow.
+- `analysis/postgame/coach.py` — `anthropic` imported lazily inside `get_coaching_feedback()`; returns `[]` gracefully if package absent or `ANTHROPIC_API_KEY` not set. This avoids a startup crash in the packaged app while keeping the feature usable in dev.
+- `overlay/main.js` — `startBackend()` spawns the exe from `process.resourcesPath/backend/`; injects `CLOUD_API_URL` and `LOG_LEVEL` env vars; `stopBackend()` called on `will-quit`.
+- `scripts/build-installer.sh` — one-command local build: PyInstaller → electron-builder.
+
+**Alternatives considered**: Ship a Python installer separately and detect it at launch (very bad UX). Bundle Python runtime manually without PyInstaller (enormous complexity).
+
+**Impact**: Person 1 — to build a release locally run `bash scripts/build-installer.sh` from repo root. For CI releases, push a version tag (see below). Person 2 — no change to overlay or web code.
+
+---
+
+## 2026-04-22 — Automated installer releases via GitHub Actions on version tag
+
+**Decision**: Pushing a `v*` tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) triggers `.github/workflows/release.yml`, which builds the NSIS installer on `windows-latest` and publishes it as a GitHub Release asset named `JungleCoach-Setup.exe`.
+
+**Why**: Building NSIS on Windows CI avoids the symlink permission error that occurs on developer machines without Windows Developer Mode enabled. A stable filename (`JungleCoach-Setup.exe`) means the download URL never changes between versions — the dashboard download button can be hardcoded.
+
+**Download URL** (permanent): `https://github.com/Sebjen0209/junglecoach/releases/latest/download/JungleCoach-Setup.exe`
+
+**Dashboard**: `web/src/app/dashboard/page.tsx` download button now points to this URL.
+
+**To cut a new release**:
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+**Alternatives considered**: Manual upload to GitHub Releases (error-prone, easy to forget). Hosting the `.exe` on Supabase Storage (adds cost and complexity vs free GitHub Releases).
+
+**Impact**: Both — agree on version numbers before tagging. Person 2 — no web changes needed for future releases; the URL is stable.
+
+---
+
 _Add new decisions below this line_
