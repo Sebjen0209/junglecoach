@@ -51,7 +51,8 @@
       "Bash(npx next *)",
       "Bash(python3 -c ' *)",
       "Bash(git -C C:UsersholmsDocumentsProjectsjunglecoach tag --sort=-v:refname)",
-      "Bash(git -C \"C:\\\\Users\\\\holms\\\\Documents\\\\Projects\\\\junglecoach\" ls-remote --tags origin)"
+      "Bash(git -C \"C:\\\\Users\\\\holms\\\\Documents\\\\Projects\\\\junglecoach\" ls-remote --tags origin)",
+      "Bash(git:*)"
     ]
   }
 }

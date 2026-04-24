@@ -252,8 +252,11 @@ function renderLanes(data) {
       </div>`;
   }).join('');
 
-  const minuteHTML = data.game_minute != null
-    ? `<span class="meta-item">Min&nbsp;${data.game_minute}</span>` : '';
+  const minuteHTML = data.game_time_seconds != null
+    ? `<span class="meta-item">${formatGameTime(data.game_time_seconds)}</span>`
+    : data.game_minute != null
+      ? `<span class="meta-item">Min&nbsp;${data.game_minute}</span>`
+      : '';
   const patchHTML = data.patch
     ? `<span class="meta-item">Patch&nbsp;${escapeHtml(data.patch)}</span>` : '';
   const refreshHTML = `<span class="meta-item meta-refresh">${isPremium ? '5s' : '10s'}</span>`;
@@ -315,6 +318,12 @@ document.getElementById('btn-minimize').addEventListener('click', () => {
 });
 
 // ── Utilities ────────────────────────────────────────────────
+function formatGameTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')

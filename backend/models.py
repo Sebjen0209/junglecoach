@@ -81,6 +81,7 @@ class AnalysisResult(BaseModel):
 
     game_detected: bool
     game_minute: int | None = None
+    game_time_seconds: float | None = None
     patch: str | None = None
     analysed_at: str | None = None
     lanes: dict[str, LaneSuggestion] | None = None

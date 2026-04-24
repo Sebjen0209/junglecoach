@@ -236,6 +236,7 @@ def analyse(
     return AnalysisResult(
         game_detected=True,
         game_minute=game_minute,
+        game_time_seconds=snapshot.game_time_seconds,
         patch=settings.current_patch,
         analysed_at=datetime.now(timezone.utc).isoformat(),
         lanes=lanes,
