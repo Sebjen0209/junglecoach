@@ -1,7 +1,7 @@
 name: Release
 
 # Triggered by pushing a version tag, e.g.:
-#   git tag v0.1.0 && git push origin v0.1.0
+#   git tag v0.4.5 && git push origin v0.4.5
 on:
   push:
     tags:
@@ -50,35 +50,12 @@ jobs:
         working-directory: overlay
         run: npm ci
 
-      - name: Build NSIS installer
+      # electron-builder publishes directly to GitHub Releases (creates the
+      # release, uploads the .exe, latest.yml, and .blockmap).
+      # latest.yml is required by electron-updater so users get auto-updates.
+      - name: Build and publish NSIS installer
         working-directory: overlay
         run: npm run build
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: List overlay/dist (debug)
-        shell: pwsh
-        run: Get-ChildItem -Path overlay/dist -Recurse | Select-Object FullName, Length
-
-      # ── Rename to a stable filename ─────────────────────────────────────────
-      # electron-builder names the file JungleCoach-Setup-<version>.exe.
-      # We copy it to JungleCoach-Setup.exe so the download URL never changes:
-      #   https://github.com/.../releases/latest/download/JungleCoach-Setup.exe
-
-      - name: Rename installer
-        shell: pwsh
-        run: |
-          $src = Get-ChildItem -Path overlay/dist -Recurse -Filter "*.exe" |
-                 Where-Object { $_.Name -notlike "*unpacked*" } |
-                 Select-Object -First 1
-          if (-not $src) { throw "No .exe found under overlay/dist" }
-          Write-Output "Found: $($src.FullName)"
-          Copy-Item $src.FullName "overlay/dist/JungleCoach-Setup.exe"
-
-      # ── Publish GitHub Release ──────────────────────────────────────────────
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: overlay/dist/JungleCoach-Setup.exe
-          generate_release_notes: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
