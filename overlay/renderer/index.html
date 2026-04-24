@@ -9,12 +9,16 @@
     content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://localhost:7429 https://qoxflvsmytpkbcxxpaxw.supabase.co"
   />
   <title>JungleCoach</title>
+  <link rel="icon" type="image/x-icon" href="../assets/icon.ico" />
   <link rel="stylesheet" href="overlay.css" />
 </head>
 <body>
   <div id="app">
     <header class="header">
-      <span class="logo">JungleCoach</span>
+      <span class="logo">
+        <img src="../assets/icon.ico" class="logo-icon" alt="" />
+        JungleCoach
+      </span>
       <div class="window-controls">
         <button id="btn-account" class="ctrl-btn account" title="Sign out" style="display:none"></button>
         <button id="btn-minimize" class="ctrl-btn" title="Minimise">&#8212;</button>

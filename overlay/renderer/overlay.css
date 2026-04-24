@@ -32,11 +32,20 @@ body {
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #5db86f;
+}
+
+.logo-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 
 .window-controls {
