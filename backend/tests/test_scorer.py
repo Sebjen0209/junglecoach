@@ -128,3 +128,90 @@ class TestScoreAllLanes:
         gs = _make_game_state(top=top)
         _, priority = score_all_lanes(gs)["top"]
         assert priority == "high"
+
+
+# ---------------------------------------------------------------------------
+# Live-signal bonuses / penalties
+# ---------------------------------------------------------------------------
+
+def _make_lane_live(
+    winrate: float = 0.50,
+    phase_strength: float = 0.5,
+    enemy_has_flash: bool = True,
+    level_diff: int = 0,
+    ally_is_dead: bool = False,
+    enemy_is_dead: bool = False,
+) -> LaneState:
+    return LaneState(
+        ally_champion="Riven",
+        enemy_champion="Gangplank",
+        matchup_winrate=winrate,
+        ally_phase_strength=phase_strength,
+        cs_diff=0,
+        ally_kill_pressure=False,
+        enemy_has_flash=enemy_has_flash,
+        level_diff=level_diff,
+        ally_is_dead=ally_is_dead,
+        enemy_is_dead=enemy_is_dead,
+    )
+
+
+class TestLiveSignals:
+    def test_no_flash_adds_20(self):
+        base = score_lane(_make_lane_live(enemy_has_flash=True))
+        no_flash = score_lane(_make_lane_live(enemy_has_flash=False))
+        assert no_flash - base == pytest.approx(20.0)
+
+    def test_enemy_with_flash_no_bonus(self):
+        lane = _make_lane_live(enemy_has_flash=True)
+        # no flash bonus — score is just phase_score (0 for 0.50 winrate)
+        assert score_lane(lane) == pytest.approx(0.0)
+
+    def test_level_ahead_adds_bonus(self):
+        base = score_lane(_make_lane_live(level_diff=0))
+        ahead = score_lane(_make_lane_live(level_diff=2))
+        # 2 levels × 4.0 weight = +8
+        assert ahead - base == pytest.approx(8.0)
+
+    def test_level_behind_subtracts(self):
+        base = score_lane(_make_lane_live(level_diff=0))
+        behind = score_lane(_make_lane_live(level_diff=-2))
+        assert base - behind == pytest.approx(8.0)
+
+    def test_level_diff_capped_at_12(self):
+        large_diff = score_lane(_make_lane_live(level_diff=10))
+        capped = score_lane(_make_lane_live(level_diff=3))
+        # 3 × 4 = 12, which is the cap; 10 × 4 = 40 would exceed cap
+        assert large_diff == capped
+
+    def test_enemy_dead_adds_25(self):
+        base = score_lane(_make_lane_live(enemy_is_dead=False))
+        dead = score_lane(_make_lane_live(enemy_is_dead=True))
+        assert dead - base == pytest.approx(25.0)
+
+    def test_ally_dead_subtracts_60(self):
+        base = score_lane(_make_lane_live(ally_is_dead=False))
+        dead = score_lane(_make_lane_live(ally_is_dead=True))
+        assert base - dead == pytest.approx(60.0)
+
+    def test_ally_dead_overrides_enemy_dead(self):
+        both_dead = score_lane(_make_lane_live(ally_is_dead=True, enemy_is_dead=True))
+        only_ally_dead = score_lane(_make_lane_live(ally_is_dead=True, enemy_is_dead=False))
+        # ally_dead takes priority — enemy_dead bonus is ignored
+        assert both_dead == only_ally_dead
+
+    def test_no_flash_and_enemy_dead_stack(self):
+        base = score_lane(_make_lane_live())
+        stacked = score_lane(_make_lane_live(enemy_has_flash=False, enemy_is_dead=True))
+        assert stacked - base == pytest.approx(20.0 + 25.0)
+
+    def test_all_signals_combine(self):
+        lane = _make_lane_live(
+            winrate=0.60,
+            phase_strength=1.0,
+            enemy_has_flash=False,
+            level_diff=2,
+            enemy_is_dead=True,
+        )
+        # counter=20, phase=20*1.0=20, flash=20, level=8, dead=25 → 73
+        assert score_lane(lane) == pytest.approx(73.0)

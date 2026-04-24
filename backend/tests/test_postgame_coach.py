@@ -1,6 +1,7 @@
 """Tests for analysis/postgame/coach.py — Claude coaching feedback."""
 
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -109,12 +110,69 @@ class TestBuildEventList:
         events = _build_event_list([_gank(90_000, lane="top", kill=True)], [], [], "Vi")
         gank = next(e for e in events if e["type"] == "gank")
         assert "top" in gank["description"]
-        assert "got a kill" in gank["description"]
+        assert "got the kill" in gank["description"]
 
     def test_gank_assist_description(self):
         events = _build_event_list([_gank(90_000, kill=False)], [], [], "Vi")
         gank = next(e for e in events if e["type"] == "gank")
-        assert "assisted a kill" in gank["description"]
+        assert "Vi assisted" in gank["description"]
+
+    def test_jungle_top_gank_location_description(self):
+        events = _build_event_list([_gank(90_000, lane="jungle/top", kill=True)], [], [], "Vi")
+        gank = next(e for e in events if e["type"] == "gank")
+        assert "top side jungle" in gank["description"]
+
+    def test_objective_jungler_solo_kill_description(self):
+        obj = ObjectiveEvent(
+            timestamp_ms=5 * 60_000,
+            timestamp_str="05:00",
+            objective_type="DRAGON",
+            secured_by_ally=True,
+            jungler_distance_from_pit=0,
+            was_near_pit=True,
+            had_vision_before=True,
+            is_first_spawn=True,
+            jungler_killed_objective=True,
+        )
+        events = _build_event_list([], [obj], [], "Vi")
+        desc = next(e for e in events if e["type"] == "objective")["description"]
+        assert "solo kill" in desc
+        assert "jungler" in desc.lower()
+
+    def test_objective_trade_description_ally_secured(self):
+        obj = ObjectiveEvent(
+            timestamp_ms=8 * 60_000,
+            timestamp_str="08:00",
+            objective_type="DRAGON",
+            secured_by_ally=True,
+            jungler_distance_from_pit=0,
+            was_near_pit=True,
+            had_vision_before=True,
+            is_first_spawn=False,
+            is_trade=True,
+            trade_with="RIFTHERALD",
+        )
+        events = _build_event_list([], [obj], [], "Vi")
+        desc = next(e for e in events if e["type"] == "objective")["description"]
+        assert "objective trade" in desc
+        assert "Rift Herald" in desc
+
+    def test_objective_available_for_trade_description(self):
+        obj = ObjectiveEvent(
+            timestamp_ms=8 * 60_000,
+            timestamp_str="08:00",
+            objective_type="DRAGON",
+            secured_by_ally=False,
+            jungler_distance_from_pit=3000,
+            was_near_pit=False,
+            had_vision_before=False,
+            is_first_spawn=False,
+            available_for_trade=["Rift Herald"],
+        )
+        events = _build_event_list([], [obj], [], "Vi")
+        desc = next(e for e in events if e["type"] == "objective")["description"]
+        assert "Alternative objectives" in desc
+        assert "Rift Herald" in desc
 
     def test_pathing_in_base_description(self):
         events = _build_event_list([], [], [_pathing(3, issue="in_base")], "Vi")
@@ -238,75 +296,69 @@ class TestParseResponse:
 # ---------------------------------------------------------------------------
 
 class TestGetCoachingFeedback:
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_returns_coaching_moments(self, mock_cls):
-        events_input = _build_event_list([_gank(90_000)], [], [], "Vi")
-        mock_client = MagicMock()
-        mock_cls.return_value = mock_client
-        mock_client.messages.create.return_value.content = [
-            MagicMock(text=_claude_json(events_input))
-        ]
+    # anthropic is imported lazily inside get_coaching_feedback() and the function
+    # also checks for an API key before using it.  We must patch both sys.modules
+    # and analysis.postgame.coach.settings to make the function run in tests.
 
-        result = get_coaching_feedback([_gank(90_000)], [], [], "Vi")
+    _FAKE_MODEL = "claude-sonnet-4-6"
+
+    def _mock_anthropic(self, response_text: str):
+        mock_mod = MagicMock()
+        mock_client = MagicMock()
+        mock_mod.Anthropic.return_value = mock_client
+        mock_client.messages.create.return_value.content = [MagicMock(text=response_text)]
+        return mock_mod, mock_client
+
+    def _call(self, mock_mod, mock_settings, *args, **kwargs):
+        with patch.dict(sys.modules, {"anthropic": mock_mod}), \
+             patch("analysis.postgame.coach.settings", mock_settings):
+            return get_coaching_feedback(*args, **kwargs)
+
+    def _settings(self, model: str = _FAKE_MODEL):
+        s = MagicMock()
+        s.anthropic_api_key = "test-key"
+        s.ai_model = model
+        return s
+
+    def test_returns_coaching_moments(self):
+        events_input = _build_event_list([_gank(90_000)], [], [], "Vi")
+        mock_mod, _ = self._mock_anthropic(_claude_json(events_input))
+        result = self._call(mock_mod, self._settings(), [_gank(90_000)], [], [], "Vi")
         assert len(result) == 1
         assert isinstance(result[0], CoachingMoment)
 
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_empty_events_skips_api(self, mock_cls):
-        result = get_coaching_feedback([], [], [], "Vi")
+    def test_empty_events_skips_api(self):
+        mock_mod = MagicMock()
+        result = self._call(mock_mod, self._settings(), [], [], [], "Vi")
         assert result == []
-        mock_cls.return_value.messages.create.assert_not_called()
+        mock_mod.Anthropic.return_value.messages.create.assert_not_called()
 
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_api_called_once(self, mock_cls):
-        events_input = _build_event_list([_gank(90_000), _gank(120_000)], [], [], "Vi")
-        mock_client = MagicMock()
-        mock_cls.return_value = mock_client
-        mock_client.messages.create.return_value.content = [
-            MagicMock(text=_claude_json(events_input))
-        ]
-
-        get_coaching_feedback([_gank(90_000), _gank(120_000)], [], [], "Vi")
+    def test_api_called_once(self):
+        ganks = [_gank(90_000), _gank(120_000)]
+        events_input = _build_event_list(ganks, [], [], "Vi")
+        mock_mod, mock_client = self._mock_anthropic(_claude_json(events_input))
+        self._call(mock_mod, self._settings(), ganks, [], [], "Vi")
         assert mock_client.messages.create.call_count == 1
 
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_api_called_with_configured_model(self, mock_cls):
-        from config import settings
+    def test_api_called_with_configured_model(self):
         events_input = _build_event_list([_gank(90_000)], [], [], "Vi")
-        mock_client = MagicMock()
-        mock_cls.return_value = mock_client
-        mock_client.messages.create.return_value.content = [
-            MagicMock(text=_claude_json(events_input))
-        ]
-
-        get_coaching_feedback([_gank(90_000)], [], [], "Vi")
+        mock_mod, mock_client = self._mock_anthropic(_claude_json(events_input))
+        self._call(mock_mod, self._settings(self._FAKE_MODEL), [_gank(90_000)], [], [], "Vi")
         kwargs = mock_client.messages.create.call_args[1]
-        assert kwargs["model"] == settings.ai_model
+        assert kwargs["model"] == self._FAKE_MODEL
 
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_multiple_events_all_returned(self, mock_cls):
+    def test_multiple_events_all_returned(self):
         ganks = [_gank(90_000, "top"), _gank(120_000, "bot")]
         events_input = _build_event_list(ganks, [], [], "Vi")
-        mock_client = MagicMock()
-        mock_cls.return_value = mock_client
-        mock_client.messages.create.return_value.content = [
-            MagicMock(text=_claude_json(events_input))
-        ]
-
-        result = get_coaching_feedback(ganks, [], [], "Vi")
+        mock_mod, _ = self._mock_anthropic(_claude_json(events_input))
+        result = self._call(mock_mod, self._settings(), ganks, [], [], "Vi")
         assert len(result) == 2
 
-    @patch("analysis.postgame.coach.anthropic.Anthropic")
-    def test_mixed_events_all_types(self, mock_cls):
+    def test_mixed_events_all_types(self):
         ganks = [_gank(90_000)]
         objectives = [_objective(5 * 60_000)]
         pathing = [_pathing(3)]
         events_input = _build_event_list(ganks, objectives, pathing, "Vi")
-        mock_client = MagicMock()
-        mock_cls.return_value = mock_client
-        mock_client.messages.create.return_value.content = [
-            MagicMock(text=_claude_json(events_input))
-        ]
-
-        result = get_coaching_feedback(ganks, objectives, pathing, "Vi")
+        mock_mod, _ = self._mock_anthropic(_claude_json(events_input))
+        result = self._call(mock_mod, self._settings(), ganks, objectives, pathing, "Vi")
         assert len(result) == 3

@@ -195,6 +195,37 @@ body {
   color: #8a8a9a;
 }
 
+/* ── Objective alert banner ────────────────────────────────── */
+.objective-alert {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #c8a84b;
+  background: rgba(200, 168, 75, 0.10);
+  border-bottom: 1px solid rgba(200, 168, 75, 0.18);
+  text-align: center;
+}
+
+/* ── Live-signal badges ─────────────────────────────────────── */
+.signals {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.sig {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.sig-noflash   { color: #ef9f27; background: rgba(239, 159, 39, 0.18); }
+.sig-dead      { color: #e24b4a; background: rgba(226, 75, 74, 0.18); }
+.sig-ally-dead { color: #555566; background: rgba(255, 255, 255, 0.06); }
+
 /* ── Hint ──────────────────────────────────────────────────── */
 .hint {
   text-align: center;

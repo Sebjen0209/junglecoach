@@ -217,6 +217,13 @@ function renderLanes(data) {
       ? `${Math.round(info.matchup_winrate * 100)}%`
       : '';
 
+    // Live-signal badges
+    const signals = [];
+    if (info.ally_is_dead)              signals.push(`<span class="sig sig-ally-dead">WAIT</span>`);
+    if (info.enemy_is_dead)             signals.push(`<span class="sig sig-dead">GONE</span>`);
+    if (info.enemy_has_flash === false) signals.push(`<span class="sig sig-noflash">NF</span>`);
+    const signalsHTML = signals.length ? `<span class="signals">${signals.join('')}</span>` : '';
+
     let reasonHTML = '';
     if (isExpanded) {
       if (isPremium && info.reason) {
@@ -236,6 +243,7 @@ function renderLanes(data) {
             <span class="enemy">${escapeHtml(info.enemy_champion)}</span>
           </span>
           <span class="right-group">
+            ${signalsHTML}
             ${winPct ? `<span class="winrate">${winPct}</span>` : ''}
             <span class="priority-badge badge-${priority}">${priority.toUpperCase()}</span>
           </span>
@@ -250,12 +258,16 @@ function renderLanes(data) {
     ? `<span class="meta-item">Patch&nbsp;${escapeHtml(data.patch)}</span>` : '';
   const refreshHTML = `<span class="meta-item meta-refresh">${isPremium ? '5s' : '10s'}</span>`;
 
+  const objectiveHTML = data.objective_alert
+    ? `<div class="objective-alert">${escapeHtml(data.objective_alert)}</div>` : '';
+
   const hintText = isPremium
     ? 'Click a lane for AI reasoning'
     : 'Upgrade for 5s refresh &amp; reasoning';
 
   content.innerHTML = `
     <div class="meta-row">${minuteHTML}${patchHTML}<span class="meta-spacer"></span>${refreshHTML}</div>
+    ${objectiveHTML}
     <div class="lanes">${lanesHTML}</div>
     <div class="hint">${hintText}</div>
   `;

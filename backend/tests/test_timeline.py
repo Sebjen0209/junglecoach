@@ -246,10 +246,36 @@ class TestObjectiveExtraction:
         data = extract_jungler_data(_MATCH, _timeline([_frame(10 * 60_000, {2: (5007, 10471)}, [evt])]))
         assert data.objectives[0].monster_type == "RIFTHERALD"
 
-    def test_jungle_camp_ignored(self):
-        evt = self._objective(60_000, "HORDE", 2)  # krugs
-        data = extract_jungler_data(_MATCH, _timeline([_frame(60_000, {2: (5000, 5000)}, [evt])]))
+    def test_horde_not_in_objectives(self):
+        # HORDE (Void Grubs) is routed to void_grub_kills, not objectives
+        evt = self._objective(6 * 60_000, "HORDE", 2)
+        data = extract_jungler_data(_MATCH, _timeline([_frame(6 * 60_000, {2: (5000, 5000)}, [evt])]))
         assert len(data.objectives) == 0
+
+    def test_horde_goes_to_void_grub_kills(self):
+        evt = self._objective(6 * 60_000, "HORDE", 2)  # jungler (blue) kills a void grub
+        data = extract_jungler_data(_MATCH, _timeline([_frame(6 * 60_000, {2: (5000, 5000)}, [evt])]))
+        assert len(data.void_grub_kills) == 1
+        ts, team = data.void_grub_kills[0]
+        assert ts == 6 * 60_000
+        assert team == BLUE_TEAM
+
+    def test_multiple_void_grubs_tracked(self):
+        evts = [self._objective(6 * 60_000 + i * 10_000, "HORDE", 2) for i in range(3)]
+        data = extract_jungler_data(_MATCH, _timeline([_frame(6 * 60_000, {2: (5000, 5000)}, evts)]))
+        assert len(data.void_grub_kills) == 3
+
+    def test_jungler_killer_sets_was_killer_true(self):
+        # Participant 2 is the jungler — getting the kill sets jungler_was_killer
+        evt = self._objective(5 * 60_000, "DRAGON", 2)
+        data = extract_jungler_data(_MATCH, _timeline([_frame(5 * 60_000, {2: (9866, 4414)}, [evt])]))
+        assert data.objectives[0].jungler_was_killer is True
+
+    def test_non_jungler_killer_was_killer_false(self):
+        # Participant 3 (mid laner) gets the kill — jungler_was_killer stays False
+        evt = self._objective(5 * 60_000, "DRAGON", 3)
+        data = extract_jungler_data(_MATCH, _timeline([_frame(5 * 60_000, {2: (5000, 5000)}, [evt])]))
+        assert data.objectives[0].jungler_was_killer is False
 
     def test_killer_team_resolved(self):
         # Killer is participant 2 (blue team)

@@ -29,6 +29,13 @@ Priority = Literal["high", "medium", "low"]
 _HIGH_THRESHOLD = 40.0
 _MEDIUM_THRESHOLD = 15.0
 
+# New live-signal bonuses / penalties
+_NO_FLASH_BONUS = 20.0      # enemy without Flash can't escape — huge kill window
+_LEVEL_DIFF_WEIGHT = 4.0    # each level ahead is a meaningful damage advantage
+_LEVEL_DIFF_CAP = 12.0      # cap so level 6 vs 1 doesn't dominate everything
+_ENEMY_DEAD_BONUS = 25.0    # free map pressure / dive setup while enemy respawns
+_ALLY_DEAD_PENALTY = 60.0   # no point going to a lane with no one to follow up
+
 
 def score_lane(lane: LaneState) -> float:
     """Compute a numeric gank-priority score for a single lane.
@@ -44,15 +51,33 @@ def score_lane(lane: LaneState) -> float:
     pressure_bonus = 15.0 if lane.ally_kill_pressure else 0.0
     cs_bonus = min(lane.cs_diff * 0.5, 20.0)
 
-    total = phase_score + pressure_bonus + cs_bonus
+    # Live-game signals (all default to 0 when data is unavailable)
+    flash_bonus = _NO_FLASH_BONUS if not lane.enemy_has_flash else 0.0
+    level_bonus = max(
+        -_LEVEL_DIFF_CAP,
+        min(_LEVEL_DIFF_CAP, lane.level_diff * _LEVEL_DIFF_WEIGHT),
+    )
+    # Dead-laner logic: ally dead overrides everything; enemy dead only helps if ally is alive
+    if lane.ally_is_dead:
+        dead_modifier = -_ALLY_DEAD_PENALTY
+    elif lane.enemy_is_dead:
+        dead_modifier = _ENEMY_DEAD_BONUS
+    else:
+        dead_modifier = 0.0
+
+    total = phase_score + pressure_bonus + cs_bonus + flash_bonus + level_bonus + dead_modifier
     logger.debug(
-        "score_lane %s vs %s → counter=%.1f phase_w=%.2f pressure=%.1f cs=%.1f total=%.1f",
+        "score_lane %s vs %s → counter=%.1f phase_w=%.2f pressure=%.1f cs=%.1f "
+        "flash=%.1f level=%.1f dead=%.1f total=%.1f",
         lane.ally_champion,
         lane.enemy_champion,
         counter_score,
         lane.ally_phase_strength,
         pressure_bonus,
         cs_bonus,
+        flash_bonus,
+        level_bonus,
+        dead_modifier,
         total,
     )
     return round(total, 2)

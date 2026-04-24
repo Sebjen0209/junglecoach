@@ -17,10 +17,22 @@ from analysis.ai_client import AIClient
 from analysis.experience import experience_delta
 from analysis.game_phase import game_time_to_phase
 from analysis.scorer import score_lane, score_to_priority
-from capture.live_client import GameSnapshot, PlayerSnapshot
+from capture.live_client import (
+    GameSnapshot,
+    PlayerSnapshot,
+    compute_objective_timers,
+    get_events,
+)
 from config import settings
 from data.db import get_matchup_winrate, get_phase_strength
-from models import AnalysisResult, GameState, LaneSuggestion, LaneState, PlayerProfile
+from models import (
+    AnalysisResult,
+    GameState,
+    LaneSuggestion,
+    LaneState,
+    ObjectiveTimers,
+    PlayerProfile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +56,10 @@ def _build_lane_state(
     cs_diff: int = 0,
     ally_kill_pressure: bool = False,
     exp_delta: float = 0.0,
+    enemy_has_flash: bool = True,
+    level_diff: int = 0,
+    ally_is_dead: bool = False,
+    enemy_is_dead: bool = False,
 ) -> LaneState:
     """Build a LaneState by looking up win rate and phase strength from the DB."""
     raw_winrate = get_matchup_winrate(ally, enemy, role) or 0.50
@@ -56,6 +72,10 @@ def _build_lane_state(
         ally_phase_strength=phase_strength,
         cs_diff=cs_diff,
         ally_kill_pressure=ally_kill_pressure,
+        enemy_has_flash=enemy_has_flash,
+        level_diff=level_diff,
+        ally_is_dead=ally_is_dead,
+        enemy_is_dead=enemy_is_dead,
     )
 
 
@@ -67,17 +87,27 @@ def build_game_state(
     cs_diffs: dict[str, int] | None = None,
     kill_pressure: dict[str, bool] | None = None,
     exp_deltas: dict[str, float] | None = None,
+    enemy_flash: dict[str, bool] | None = None,
+    level_diffs: dict[str, int] | None = None,
+    dead_laners: dict[str, tuple[bool, bool]] | None = None,
+    game_time_seconds: float = 0.0,
+    objective_timers: ObjectiveTimers | None = None,
 ) -> GameState:
     """Construct a GameState from role maps, DB lookups, and experience data.
 
     Args:
-        ally_roles:    {role: champion_name} for the ally team
-        enemy_roles:   {role: champion_name} for the enemy team
-        phase:         'early' | 'mid' | 'late'
-        game_minute:   current game minute
-        cs_diffs:      {role: int} CS differences (positive = ally ahead)
-        kill_pressure: {role: bool} whether ally has kill pressure
-        exp_deltas:    {role: float} experience win-rate adjustments per lane
+        ally_roles:       {role: champion_name} for the ally team
+        enemy_roles:      {role: champion_name} for the enemy team
+        phase:            'early' | 'mid' | 'late'
+        game_minute:      current game minute
+        cs_diffs:         {role: int} CS differences (positive = ally ahead)
+        kill_pressure:    {role: bool} whether ally has kill pressure
+        exp_deltas:       {role: float} experience win-rate adjustments per lane
+        enemy_flash:      {role: bool} whether the enemy laner has Flash
+        level_diffs:      {role: int} ally level minus enemy level
+        dead_laners:      {role: (ally_dead, enemy_dead)} respawn state
+        game_time_seconds: raw game clock for objective timers
+        objective_timers: pre-computed objective spawn state
 
     Returns:
         A fully populated GameState ready for scoring and AI analysis.
@@ -85,6 +115,9 @@ def build_game_state(
     cs_diffs = cs_diffs or {}
     kill_pressure = kill_pressure or {}
     exp_deltas = exp_deltas or {}
+    enemy_flash = enemy_flash or {}
+    level_diffs = level_diffs or {}
+    dead_laners = dead_laners or {}
 
     lane_states = {
         role: _build_lane_state(
@@ -95,6 +128,10 @@ def build_game_state(
             cs_diff=cs_diffs.get(role, 0),
             ally_kill_pressure=kill_pressure.get(role, False),
             exp_delta=exp_deltas.get(role, 0.0),
+            enemy_has_flash=enemy_flash.get(role, True),
+            level_diff=level_diffs.get(role, 0),
+            ally_is_dead=dead_laners.get(role, (False, False))[0],
+            enemy_is_dead=dead_laners.get(role, (False, False))[1],
         )
         for role in _GANK_LANES
     }
@@ -106,6 +143,8 @@ def build_game_state(
         top=lane_states["top"],
         mid=lane_states["mid"],
         bot=lane_states["bot"],
+        game_time_seconds=game_time_seconds,
+        objective_timers=objective_timers,
     )
 
 
@@ -140,6 +179,10 @@ def analyse(
     # Map profiles from summoner_name → role for experience delta calculation.
     exp_deltas = _compute_experience_deltas(snapshot, player_profiles or {})
 
+    # Fetch live objective timers from the event history endpoint.
+    events = get_events()
+    objective_timers = compute_objective_timers(events, snapshot.game_time_seconds)
+
     game_state = build_game_state(
         ally_roles=snapshot.ally_roles(),
         enemy_roles=snapshot.enemy_roles(),
@@ -148,6 +191,11 @@ def analyse(
         cs_diffs=snapshot.cs_diffs(),
         kill_pressure=snapshot.kill_pressure(),
         exp_deltas=exp_deltas,
+        enemy_flash=snapshot.enemy_has_flash(),
+        level_diffs=snapshot.level_diffs(),
+        dead_laners=snapshot.dead_laners(),
+        game_time_seconds=snapshot.game_time_seconds,
+        objective_timers=objective_timers,
     )
 
     # Score all lanes
@@ -158,8 +206,13 @@ def analyse(
         priority = score_to_priority(score)
         lane_scores[lane_name] = (score, priority)
 
-    # Get AI reasons from cloud API (cached if state is unchanged)
-    reasons = ai_client.get_reasons(game_state, jwt=jwt)
+    # Get AI reasons from cloud API (cached if state is unchanged).
+    # Fall back to scorer-derived reasons if the AI call fails.
+    try:
+        reasons = ai_client.get_reasons(game_state, jwt=jwt)
+    except Exception:
+        logger.warning("AI client failed — using fallback reasons", exc_info=True)
+        reasons = {}
 
     # Assemble final result
     lanes: dict[str, LaneSuggestion] = {}
@@ -171,9 +224,14 @@ def analyse(
             enemy_champion=lane.enemy_champion,
             matchup_winrate=lane.matchup_winrate,
             priority=priority,
-            reason=reasons.get(lane_name),
+            reason=reasons.get(lane_name) or _fallback_reason(lane, priority),
             score=score,
+            enemy_has_flash=lane.enemy_has_flash,
+            enemy_is_dead=lane.enemy_is_dead,
+            ally_is_dead=lane.ally_is_dead,
         )
+
+    alert = objective_timers.next_objective_alert if objective_timers else ""
 
     return AnalysisResult(
         game_detected=True,
@@ -181,7 +239,19 @@ def analyse(
         patch=settings.current_patch,
         analysed_at=datetime.now(timezone.utc).isoformat(),
         lanes=lanes,
+        objective_alert=alert,
     )
+
+
+def _fallback_reason(lane: LaneState, priority: str) -> str:
+    """Generate a brief reason when the AI is unavailable."""
+    ally = lane.ally_champion
+    enemy = lane.enemy_champion
+    if priority == "high":
+        return f"{ally} vs {enemy} — strong gank opportunity."
+    if priority == "medium":
+        return f"{ally} vs {enemy} — worth ganking if ahead."
+    return f"{ally} vs {enemy} — low priority this rotation."
 
 
 def _compute_experience_deltas(
@@ -203,5 +273,3 @@ def _compute_experience_deltas(
         role: experience_delta(ally_by_role.get(role), enemy_by_role.get(role))
         for role in _GANK_LANES
     }
-
-

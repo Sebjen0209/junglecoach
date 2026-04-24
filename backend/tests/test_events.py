@@ -43,7 +43,15 @@ def _raw_gank(ts_ms: int, killer: int, victim: int, assisting: list[int], x: int
     )
 
 
-def _raw_obj(ts_ms: int, monster: str, killer_id: int, killer_team: int, jx: int, jy: int) -> RawObjective:
+def _raw_obj(
+    ts_ms: int,
+    monster: str,
+    killer_id: int,
+    killer_team: int,
+    jx: int,
+    jy: int,
+    jungler_was_killer: bool = False,
+) -> RawObjective:
     return RawObjective(
         timestamp_ms=ts_ms,
         monster_type=monster,
@@ -51,6 +59,7 @@ def _raw_obj(ts_ms: int, monster: str, killer_id: int, killer_team: int, jx: int
         killer_team_id=killer_team,
         jungler_x=jx,
         jungler_y=jy,
+        jungler_was_killer=jungler_was_killer,
     )
 
 
@@ -91,7 +100,8 @@ class TestMsToStr:
 
 class TestClassifyLane:
     def test_low_y_is_bot(self):
-        assert _classify_lane(7000, 2000) == "bot"
+        # Hard bot zone: x > 10500 AND y < 5000
+        assert _classify_lane(11000, 3000) == "bot"
 
     def test_high_y_is_top(self):
         assert _classify_lane(3000, 12000) == "top"
@@ -99,13 +109,27 @@ class TestClassifyLane:
     def test_middle_y_is_mid(self):
         assert _classify_lane(7000, 7000) == "mid"
 
-    def test_at_bot_boundary(self):
-        assert _classify_lane(5000, 4999) == "bot"
-        assert _classify_lane(5000, 5001) == "mid"
+    def test_at_hard_bot_boundary(self):
+        # Just inside and just outside the hard bot zone (x threshold is 10500)
+        assert _classify_lane(10501, 4999) == "bot"
+        assert _classify_lane(10499, 4999) == "jungle/bot"
 
-    def test_at_top_boundary(self):
-        assert _classify_lane(5000, 9999) == "mid"
-        assert _classify_lane(5000, 10001) == "top"
+    def test_at_hard_top_boundary(self):
+        # Just inside and just outside the hard top zone (x threshold is 3800)
+        assert _classify_lane(3799, 9501) == "top"
+        assert _classify_lane(3801, 9501) == "jungle/top"
+
+    def test_jungle_top_zone(self):
+        # Near top lane but in the jungle — x < 5500 AND y > 8500
+        assert _classify_lane(4500, 9000) == "jungle/top"
+
+    def test_jungle_bot_zone(self):
+        # Near bot lane but in the jungle — x > 8500 AND y < 6000
+        assert _classify_lane(9500, 4500) == "jungle/bot"
+
+    def test_deep_jungle_is_jungle(self):
+        # Centre of the map, away from all lane/near-lane zones
+        assert _classify_lane(7000, 5000) == "jungle"
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +152,7 @@ class TestClassifyGanks:
         assert result[0].was_jungler_killer is False
 
     def test_lane_bot(self):
-        ganks = [_raw_gank(90_000, self.JUNGLER, 9, [], x=8000, y=2000)]
+        ganks = [_raw_gank(90_000, self.JUNGLER, 9, [], x=11000, y=2000)]
         assert classify_ganks(ganks, self.JUNGLER)[0].lane == "bot"
 
     def test_lane_top(self):
@@ -234,6 +258,84 @@ class TestClassifyObjectives:
 
     def test_empty_returns_empty(self):
         assert classify_objectives([], [], BLUE_TEAM) == []
+
+    def test_jungler_killer_sets_flag_and_forces_zero_distance(self):
+        # When jungler gets the smite, the per-minute position frame is unreliable —
+        # distance must be forced to 0 and jungler_killed_objective set True.
+        obj = [_raw_obj(5 * 60_000, "DRAGON", 2, BLUE_TEAM, 500, 500, jungler_was_killer=True)]
+        ev = classify_objectives(obj, [], BLUE_TEAM)[0]
+        assert ev.jungler_killed_objective is True
+        assert ev.jungler_distance_from_pit == 0
+        assert ev.was_near_pit is True
+
+    def test_non_killer_jungler_distance_computed_normally(self):
+        obj = [_raw_obj(5 * 60_000, "DRAGON", 3, RED_TEAM, 500, 500)]
+        ev = classify_objectives(obj, [], BLUE_TEAM)[0]
+        assert ev.jungler_killed_objective is False
+        assert ev.jungler_distance_from_pit > 0
+
+    def test_detect_trades_opposite_teams_within_60s(self):
+        # Dragon (ally) and Herald (enemy) taken 30 s apart → both flagged
+        dragon_ts = 8 * 60_000
+        herald_ts = dragon_ts + 30_000
+        objs = [
+            _raw_obj(dragon_ts, "DRAGON",     2, BLUE_TEAM, *DRAGON_PIT),
+            _raw_obj(herald_ts, "RIFTHERALD", 7, RED_TEAM,  *BARON_PIT),
+        ]
+        result = classify_objectives(objs, [], BLUE_TEAM)
+        dragon = next(e for e in result if e.objective_type == "DRAGON")
+        herald = next(e for e in result if e.objective_type == "RIFTHERALD")
+        assert dragon.is_trade is True
+        assert herald.is_trade is True
+        assert dragon.trade_with == "RIFTHERALD"
+        assert herald.trade_with == "DRAGON"
+
+    def test_no_trade_same_team(self):
+        objs = [
+            _raw_obj(5 * 60_000,          "DRAGON",     2, BLUE_TEAM, *DRAGON_PIT),
+            _raw_obj(5 * 60_000 + 30_000, "RIFTHERALD", 2, BLUE_TEAM, *BARON_PIT),
+        ]
+        result = classify_objectives(objs, [], BLUE_TEAM)
+        assert all(not e.is_trade for e in result)
+
+    def test_no_trade_outside_window(self):
+        # More than 60 s apart — not a trade
+        objs = [
+            _raw_obj(5 * 60_000,          "DRAGON",     2, BLUE_TEAM, *DRAGON_PIT),
+            _raw_obj(5 * 60_000 + 61_000, "RIFTHERALD", 7, RED_TEAM,  *BARON_PIT),
+        ]
+        result = classify_objectives(objs, [], BLUE_TEAM)
+        assert all(not e.is_trade for e in result)
+
+    def test_available_for_trade_lists_dragon_when_enemy_takes_baron(self):
+        # Enemy takes baron at 20 min; dragon is available (no prior dragon kills)
+        baron_ts = 20 * 60_000
+        objs = [_raw_obj(baron_ts, "BARON_NASHOR", 7, RED_TEAM, 5000, 5000)]
+        ev = classify_objectives(objs, [], BLUE_TEAM)[0]
+        assert not ev.secured_by_ally
+        assert any("Dragon" in a for a in ev.available_for_trade)
+
+    def test_available_for_trade_void_grubs_counted(self):
+        # Enemy takes dragon at 10 min; 4 void grubs already killed → 2 remaining
+        dragon_ts = 10 * 60_000
+        void_grub_kills = [
+            (5 * 60_000,          RED_TEAM),
+            (5 * 60_000 + 30_000, RED_TEAM),
+            (6 * 60_000,          RED_TEAM),
+            (6 * 60_000 + 30_000, RED_TEAM),
+        ]
+        objs = [_raw_obj(dragon_ts, "DRAGON", 7, RED_TEAM, 5000, 5000)]
+        ev = classify_objectives(objs, [], BLUE_TEAM, void_grub_kills=void_grub_kills)[0]
+        grub_entries = [a for a in ev.available_for_trade if "Void Grub" in a]
+        assert len(grub_entries) == 1
+        assert "2 remaining" in grub_entries[0]
+
+    def test_available_for_trade_not_suggested_for_ally_secured(self):
+        # When ally secures an objective, available_for_trade is still computed
+        # but the field should exist (coach.py decides whether to surface it).
+        objs = [_raw_obj(5 * 60_000, "DRAGON", 2, BLUE_TEAM, *DRAGON_PIT)]
+        ev = classify_objectives(objs, [], BLUE_TEAM)[0]
+        assert isinstance(ev.available_for_trade, list)
 
 
 # ---------------------------------------------------------------------------

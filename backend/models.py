@@ -21,6 +21,17 @@ class PlayerProfile:
     rank_name: str          # e.g. "GOLD", "PLATINUM", "UNRANKED"
 
 
+class ObjectiveTimers(BaseModel):
+    """Live spawn state for major objectives, derived from /liveclientdata/eventdata."""
+
+    dragon_up: bool = True
+    dragon_spawns_at: float | None = None    # game-seconds when dragon next spawns
+    baron_up: bool = False
+    baron_spawns_at: float | None = None
+    herald_available: bool = False
+    next_objective_alert: str = ""           # e.g. "Dragon UP" | "Baron in 45s" | ""
+
+
 class LaneState(BaseModel):
     """Input data for a single lane, used by the scorer."""
 
@@ -30,6 +41,11 @@ class LaneState(BaseModel):
     ally_phase_strength: float = Field(ge=0.0, le=1.0)
     cs_diff: int
     ally_kill_pressure: bool
+    # Live-game signals — all optional with safe defaults so offline/test code needs no changes
+    enemy_has_flash: bool = True       # False → enemy cannot escape a gank
+    level_diff: int = 0                # ally level minus enemy level
+    ally_is_dead: bool = False         # gank pointless while ally is dead
+    enemy_is_dead: bool = False        # free pressure window while enemy respawns
 
 
 class GameState(BaseModel):
@@ -41,6 +57,8 @@ class GameState(BaseModel):
     top: LaneState
     mid: LaneState
     bot: LaneState
+    game_time_seconds: float = 0.0
+    objective_timers: ObjectiveTimers | None = None
 
 
 class LaneSuggestion(BaseModel):
@@ -52,6 +70,10 @@ class LaneSuggestion(BaseModel):
     priority: Literal["high", "medium", "low"]
     reason: str | None = None
     score: float
+    # Live-signal badges shown in the overlay
+    enemy_has_flash: bool = True
+    enemy_is_dead: bool = False
+    ally_is_dead: bool = False
 
 
 class AnalysisResult(BaseModel):
@@ -62,6 +84,7 @@ class AnalysisResult(BaseModel):
     patch: str | None = None
     analysed_at: str | None = None
     lanes: dict[str, LaneSuggestion] | None = None
+    objective_alert: str = ""  # e.g. "Dragon UP | Baron in 45s"
 
 
 class CoachingMoment(BaseModel):

@@ -19,9 +19,22 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _ALL_GAME_DATA_URL = "https://127.0.0.1:2999/liveclientdata/allgamedata"
+_EVENT_DATA_URL = "https://127.0.0.1:2999/liveclientdata/eventdata"
 
 # Must complete well within one capture cycle. The API is local so 2s is generous.
 _TIMEOUT = 2.0
+
+# Objective spawn / respawn timers in game-seconds
+_DRAGON_FIRST_SPAWN_S: float = 5 * 60
+_DRAGON_RESPAWN_S: float = 5 * 60
+_BARON_FIRST_SPAWN_S: float = 20 * 60
+_BARON_RESPAWN_S: float = 6 * 60
+_HERALD_SPAWN_S: float = 8 * 60
+_HERALD_DESPAWN_S: float = 20 * 60  # gone when Baron spawns
+_HERALD_MAX_KILLS: int = 2           # max 2 per game
+
+# Only count a laner as exploitably dead if they have this many seconds left on respawn
+_MIN_RESPAWN_TO_EXPLOIT_S: float = 5.0
 
 # Maps the API's position strings to our internal role names.
 # Riot uses "UTILITY" for the support role.
@@ -56,6 +69,8 @@ class PlayerSnapshot:
     deaths: int
     assists: int
     summoner_name: str
+    is_dead: bool = False           # True while the player is on the respawn screen
+    respawn_timer: float = 0.0      # seconds remaining until respawn (0 when alive)
 
 
 @dataclass
@@ -86,6 +101,46 @@ class GameSnapshot:
         enemy_cs = {p.position: p.cs for p in self.enemy_players}
         return {
             role: ally_cs.get(role, 0) - enemy_cs.get(role, 0)
+            for role in ("top", "mid", "bot")
+        }
+
+    def enemy_has_flash(self) -> dict[str, bool]:
+        """Return {role: bool} — True if the enemy laner has Flash equipped.
+
+        Flash is visible on the TAB scoreboard and in the Live Client API.
+        An enemy without Flash is significantly easier to kill on a gank.
+        """
+        return {
+            p.position: ("SummonerFlash" in p.summoner_spells)
+            for p in self.enemy_players
+            if p.position in ("top", "mid", "bot")
+        }
+
+    def level_diffs(self) -> dict[str, int]:
+        """Return {role: int} — positive when ally is higher level than enemy."""
+        ally_levels = {p.position: p.level for p in self.ally_players}
+        enemy_levels = {p.position: p.level for p in self.enemy_players}
+        return {
+            role: ally_levels.get(role, 1) - enemy_levels.get(role, 1)
+            for role in ("top", "mid", "bot")
+        }
+
+    def dead_laners(self) -> dict[str, tuple[bool, bool]]:
+        """Return {role: (ally_is_dead, enemy_is_dead)} for gank lanes.
+
+        Only flags players as dead when they have enough respawn time remaining
+        to make the dead-laner information tactically relevant (>5 seconds).
+        """
+        ally_dead = {
+            p.position: (p.is_dead and p.respawn_timer > _MIN_RESPAWN_TO_EXPLOIT_S)
+            for p in self.ally_players
+        }
+        enemy_dead = {
+            p.position: (p.is_dead and p.respawn_timer > _MIN_RESPAWN_TO_EXPLOIT_S)
+            for p in self.enemy_players
+        }
+        return {
+            role: (ally_dead.get(role, False), enemy_dead.get(role, False))
             for role in ("top", "mid", "bot")
         }
 
@@ -233,6 +288,8 @@ def _parse_player(raw: dict) -> "PlayerSnapshot | None":
             deaths=int(scores.get("deaths", 0)),
             assists=int(scores.get("assists", 0)),
             summoner_name=str(raw.get("summonerName", "")),
+            is_dead=bool(raw.get("isDead", False)),
+            respawn_timer=float(raw.get("respawnTimer", 0.0)),
         )
     except (KeyError, TypeError, ValueError) as exc:
         logger.warning(
@@ -241,6 +298,129 @@ def _parse_player(raw: dict) -> "PlayerSnapshot | None":
             exc,
         )
         return None
+
+
+def get_events() -> list[dict]:
+    """Fetch the full event history from the Riot Live Client eventdata endpoint.
+
+    Returns an empty list if the game is not running or the API is unreachable.
+    The list accumulates all events from game start, so it grows over the game.
+    """
+    try:
+        with httpx.Client(verify=False, timeout=_TIMEOUT) as client:
+            resp = client.get(_EVENT_DATA_URL)
+    except Exception as exc:
+        logger.debug("Live Client eventdata not reachable: %s", exc)
+        return []
+
+    if resp.status_code != 200:
+        logger.debug("Live Client eventdata returned HTTP %d", resp.status_code)
+        return []
+
+    try:
+        return resp.json().get("Events", [])
+    except Exception as exc:
+        logger.error("Failed to parse eventdata response: %s", exc)
+        return []
+
+
+def compute_objective_timers(events: list[dict], game_time_s: float) -> "ObjectiveTimers":
+    """Compute current objective spawn state from accumulated event history.
+
+    Args:
+        events:       Event list from get_events() or an empty list.
+        game_time_s:  Current game time in seconds (from the allgamedata response).
+
+    Returns:
+        ObjectiveTimers describing which objectives are up and when the next spawn is.
+    """
+    from models import ObjectiveTimers  # local import avoids top-level circular risk
+
+    dragon_kill_times: list[float] = []
+    baron_kill_times: list[float] = []
+    herald_kill_count: int = 0
+
+    for evt in events:
+        name = evt.get("EventName", "")
+        etime = float(evt.get("EventTime", 0.0))
+        if name == "DragonKill":
+            dragon_kill_times.append(etime)
+        elif name == "BaronKill":
+            baron_kill_times.append(etime)
+        elif name == "HeraldKill":
+            herald_kill_count += 1
+
+    # --- Dragon ---
+    if dragon_kill_times:
+        next_dragon = max(dragon_kill_times) + _DRAGON_RESPAWN_S
+        dragon_up = game_time_s >= next_dragon
+        dragon_spawns_at: float | None = None if dragon_up else next_dragon
+    else:
+        dragon_up = game_time_s >= _DRAGON_FIRST_SPAWN_S
+        dragon_spawns_at = None if dragon_up else _DRAGON_FIRST_SPAWN_S
+
+    # --- Baron ---
+    if baron_kill_times:
+        next_baron = max(baron_kill_times) + _BARON_RESPAWN_S
+        baron_up = game_time_s >= next_baron
+        baron_spawns_at: float | None = None if baron_up else next_baron
+    else:
+        baron_up = game_time_s >= _BARON_FIRST_SPAWN_S
+        baron_spawns_at = None if baron_up else _BARON_FIRST_SPAWN_S
+
+    # --- Rift Herald (max 2, present 8:00–20:00) ---
+    herald_available = (
+        _HERALD_SPAWN_S <= game_time_s < _HERALD_DESPAWN_S
+        and herald_kill_count < _HERALD_MAX_KILLS
+    )
+
+    # --- Human-readable alert for the overlay ---
+    next_objective_alert = _build_objective_alert(
+        game_time_s,
+        dragon_up, dragon_spawns_at,
+        baron_up, baron_spawns_at,
+        herald_available,
+    )
+
+    return ObjectiveTimers(
+        dragon_up=dragon_up,
+        dragon_spawns_at=dragon_spawns_at,
+        baron_up=baron_up,
+        baron_spawns_at=baron_spawns_at,
+        herald_available=herald_available,
+        next_objective_alert=next_objective_alert,
+    )
+
+
+def _build_objective_alert(
+    game_time_s: float,
+    dragon_up: bool,
+    dragon_spawns_at: float | None,
+    baron_up: bool,
+    baron_spawns_at: float | None,
+    herald_available: bool,
+) -> str:
+    """Return a short overlay-ready string summarising imminent objective windows."""
+    parts: list[str] = []
+
+    if baron_up:
+        parts.append("Baron UP")
+    elif baron_spawns_at is not None:
+        secs = int(baron_spawns_at - game_time_s)
+        if secs <= 90:
+            parts.append(f"Baron in {secs}s")
+
+    if dragon_up:
+        parts.append("Dragon UP")
+    elif dragon_spawns_at is not None:
+        secs = int(dragon_spawns_at - game_time_s)
+        if secs <= 90:
+            parts.append(f"Dragon in {secs}s")
+
+    if herald_available:
+        parts.append("Herald available")
+
+    return " | ".join(parts)
 
 
 def _parse_summoner_spells(raw_spells: dict) -> frozenset[str]:
