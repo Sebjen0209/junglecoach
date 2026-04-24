@@ -1,6 +1,6 @@
 {
   "name": "junglecoach-overlay",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "JungleCoach real-time gank priority overlay",
   "author": "JungleCoach",
   "main": "main.js",
