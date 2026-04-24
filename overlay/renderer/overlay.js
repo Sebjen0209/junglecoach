@@ -323,5 +323,23 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Auto-update banner ────────────────────────────────────────
+window.electronAPI.onUpdateReady(() => {
+  const existing = document.getElementById('update-banner');
+  if (existing) return;
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.className = 'update-banner';
+  banner.innerHTML = `
+    Update ready —
+    <button id="btn-update" class="update-btn">Restart &amp; install</button>
+  `;
+  document.getElementById('app').prepend(banner);
+  document.getElementById('btn-update').addEventListener('click', () => {
+    window.electronAPI.restartAndUpdate();
+  });
+  syncHeight();
+});
+
 // ── Boot ─────────────────────────────────────────────────────
 boot();

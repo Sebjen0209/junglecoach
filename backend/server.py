@@ -32,7 +32,7 @@ from models import AnalysisResult, PlayerProfile, PostGameAnalysis
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.2.0"
+_VERSION = "0.4.0"
 
 # ---------------------------------------------------------------------------
 # Application state (shared across requests)

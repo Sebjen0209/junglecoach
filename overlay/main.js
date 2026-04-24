@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, screen, safeStorage } = require('electron')
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 const WINDOW_WIDTH = 290;
 const WINDOW_HEIGHT_INITIAL = 160;
@@ -93,9 +94,20 @@ function createWindow() {
   });
 }
 
+// ── Auto-updater ─────────────────────────────────────────────
+
+autoUpdater.autoDownload = true;        // download silently in background
+autoUpdater.autoInstallOnAppQuit = true; // install when the user closes the app
+
+autoUpdater.on('update-downloaded', () => {
+  if (mainWindow) mainWindow.webContents.send('update-ready');
+});
+
 app.whenReady().then(() => {
   startBackend();
   createWindow();
+  // Check for updates a few seconds after launch so the window is settled.
+  if (app.isPackaged) setTimeout(() => autoUpdater.checkForUpdates(), 5000);
 });
 
 app.on('window-all-closed', () => {
@@ -148,6 +160,10 @@ ipcMain.handle('save-token', (_event, token) => {
   } catch {
     return false;
   }
+});
+
+ipcMain.handle('restart-and-update', () => {
+  autoUpdater.quitAndInstall();
 });
 
 ipcMain.handle('clear-token', () => {

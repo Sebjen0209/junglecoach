@@ -195,6 +195,34 @@ body {
   color: #8a8a9a;
 }
 
+/* ── Auto-update banner ─────────────────────────────────────── */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 10px;
+  color: #5db86f;
+  background: rgba(93, 184, 111, 0.10);
+  border-bottom: 1px solid rgba(93, 184, 111, 0.20);
+}
+
+.update-btn {
+  background: rgba(93, 184, 111, 0.20);
+  border: 1px solid rgba(93, 184, 111, 0.35);
+  border-radius: 3px;
+  color: #5db86f;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  transition: background 0.12s;
+}
+.update-btn:hover { background: rgba(93, 184, 111, 0.32); }
+
 /* ── Objective alert banner ────────────────────────────────── */
 .objective-alert {
   padding: 4px 10px;

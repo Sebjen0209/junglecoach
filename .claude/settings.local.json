@@ -49,7 +49,9 @@
       "Bash(grep -v \":0$\")",
       "Bash(npx tsc *)",
       "Bash(npx next *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(git -C C:UsersholmsDocumentsProjectsjunglecoach tag --sort=-v:refname)",
+      "Bash(git -C \"C:\\\\Users\\\\holms\\\\Documents\\\\Projects\\\\junglecoach\" ls-remote --tags origin)"
     ]
   }
 }
