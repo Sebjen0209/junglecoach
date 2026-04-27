@@ -778,6 +778,8 @@ function Footer() {
           JungleCoach is not affiliated with Riot Games. League of Legends is a trademark of Riot Games, Inc.
         </p>
         <div className="flex gap-4">
+          <Link href="/terms" className="sub-heading text-xs tracking-widest transition-colors" style={{ color: "#7986cb" }}>Terms</Link>
+          <Link href="/privacy" className="sub-heading text-xs tracking-widest transition-colors" style={{ color: "#7986cb" }}>Privacy</Link>
           <Link href="/login" className="sub-heading text-xs tracking-widest transition-colors" style={{ color: "#7986cb" }}>Log in</Link>
           <Link href="/signup" className="sub-heading text-xs tracking-widest transition-colors" style={{ color: "#7986cb" }}>Sign up</Link>
         </div>
