@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cinzel, Rajdhani, Barlow } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const cinzel = Cinzel({
@@ -37,6 +38,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${cinzel.variable} ${rajdhani.variable} ${barlow.variable}`}>
+      <head>
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9344720847252795"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className="min-h-screen antialiased">
         {children}
       </body>
