@@ -159,7 +159,7 @@ def get_user_plan(user_id: str) -> str:
         )
         if result.data:
             row = result.data[0]
-            if row.get("status") == "active":
+            if row.get("status") in ("active", "cancelling", "past_due"):
                 return row.get("plan", "free")
     except Exception as exc:
         logger.warning("Could not fetch plan for user %.8s: %s", user_id, exc)
@@ -181,6 +181,25 @@ def count_recent_analyses(user_id: str, since_iso: str) -> int:
     except Exception as exc:
         logger.warning("Could not count analyses for user %.8s: %s", user_id, exc)
     return 0
+
+
+def get_analysed_match_ids(user_id: str, match_ids: list[str]) -> set[str]:
+    """Return the subset of match_ids this user has already analysed."""
+    if not match_ids:
+        return set()
+    try:
+        result = (
+            get_client()
+            .table("post_game_analyses")
+            .select("match_id")
+            .eq("user_id", user_id)
+            .in_("match_id", match_ids)
+            .execute()
+        )
+        return {row["match_id"] for row in result.data}
+    except Exception as exc:
+        logger.warning("Could not check analysed match IDs for user %.8s: %s", user_id, exc)
+        return set()
 
 
 def save_analysis(user_id: str, analysis: PostGameAnalysis) -> None:
