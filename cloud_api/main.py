@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import analysis, data, postgame
+from routers import analysis, data, match_history, postgame
 
 # ---------------------------------------------------------------------------
 # Logging — stdout so Railway log aggregation picks it up
@@ -113,6 +113,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 # ---------------------------------------------------------------------------
 
 app.include_router(postgame.router)
+app.include_router(match_history.router)
 app.include_router(data.router)
 app.include_router(analysis.router)
 

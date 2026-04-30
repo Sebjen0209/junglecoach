@@ -1,31 +1,112 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { MatchHistoryForm } from "@/components/MatchHistoryForm";
+import { ManualAnalysisSection } from "@/components/ManualAnalysisSection";
+import { RecentMatchesLookup } from "@/components/RecentMatchesLookup";
 import type { AnalysisSummary } from "@/lib/cloud-api";
+
+const PLAN_LIMITS: Record<string, { count: number; days: number }> = {
+  free:    { count: 2,  days: 30 },
+  premium: { count: 15, days: 7 },
+  pro:     { count: 35, days: 7 },
+};
 
 export default async function HistoryPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: rows } = await supabase
-    .from("post_game_analyses")
-    .select("match_id, jungler_champion, analysed_at, gank_count, objective_count, pathing_issue_count, created_at")
-    .eq("user_id", user!.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const [{ data: rows }, { data: sub }, { count: usedCount }] = await Promise.all([
+    supabase
+      .from("post_game_analyses")
+      .select("match_id, jungler_champion, analysed_at, gank_count, objective_count, pathing_issue_count, created_at")
+      .eq("user_id", user!.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("subscriptions")
+      .select("plan, status")
+      .eq("user_id", user!.id)
+      .maybeSingle(),
+    supabase
+      .from("post_game_analyses")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
 
+  const plan = (sub && ["active", "cancelling", "past_due"].includes(sub.status ?? ""))
+    ? (sub.plan ?? "free")
+    : "free";
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
+
+  // For non-free plans, recount with the correct rolling window
+  let used = usedCount ?? 0;
+  if (plan !== "free" && limits.days !== 30) {
+    const { count } = await supabase
+      .from("post_game_analyses")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .gte("created_at", new Date(Date.now() - limits.days * 24 * 60 * 60 * 1000).toISOString());
+    used = count ?? 0;
+  }
+
+  const remaining = Math.max(0, limits.count - used);
   const analyses = (rows ?? []) as AnalysisSummary[];
+
+  const windowLabel = limits.days === 30 ? "month" : "week";
+  const pctUsed = limits.count > 0 ? Math.min(100, (used / limits.count) * 100) : 0;
+  const quotaColor = remaining === 0 ? "#f87171" : remaining <= 1 ? "#fb923c" : "#4ade80";
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Match History</h1>
-        <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>
-          Post-game jungle coaching from your recent matches.
-        </p>
+      {/* Header + quota */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Match History</h1>
+          <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>
+            Post-game jungle coaching from your recent matches.
+          </p>
+        </div>
+
+        {/* Quota pill */}
+        <div
+          className="rounded-xl px-4 py-3 border flex-shrink-0"
+          style={{
+            background: "rgba(13,13,43,0.8)",
+            borderColor: "rgba(80,90,180,0.3)",
+            minWidth: 180,
+          }}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold" style={{ color: quotaColor }}>
+              {remaining} left
+            </span>
+            <span className="text-xs" style={{ color: "#6b7280" }}>
+              {used} / {limits.count} this {windowLabel}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${pctUsed}%`, background: quotaColor }}
+            />
+          </div>
+          {remaining === 0 && (
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-xs" style={{ color: "#6b7280" }}>Limit reached</span>
+              <a href="/billing" className="text-xs font-medium" style={{ color: "#67e8f9" }}>
+                Upgrade →
+              </a>
+            </div>
+          )}
+          {plan !== "free" && (
+            <p className="text-xs mt-1.5 capitalize" style={{ color: "#6b7280" }}>
+              {plan} plan
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Submit form */}
+      {/* Recent matches lookup */}
       <div
         className="rounded-xl p-6 border"
         style={{
@@ -35,23 +116,16 @@ export default async function HistoryPage() {
         }}
       >
         <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-2" style={{ color: "#7986cb" }}>
-          ANALYSE A MATCH
+          RECENT RANKED MATCHES
         </p>
         <p className="text-sm mb-5" style={{ color: "#c5cae9" }}>
-          Paste a match ID from your profile on{" "}
-          <a
-            href="https://www.op.gg"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#00e5ff" }}
-            className="hover:underline transition-colors"
-          >
-            op.gg
-          </a>{" "}
-          or the League client.
+          Enter your Riot ID to see your last 10 ranked games and analyse any of them.
         </p>
-        <MatchHistoryForm />
+        <RecentMatchesLookup />
       </div>
+
+      {/* Manual match ID — collapsed by default */}
+      <ManualAnalysisSection />
 
       {/* Past analyses */}
       <div>
