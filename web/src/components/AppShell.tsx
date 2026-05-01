@@ -55,7 +55,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </Link>
 
           {/* Centre — nav links */}
-          <div className="hidden md:flex items-center justify-center gap-8">
+          <div className="hidden md:flex items-center justify-center gap-1">
             {NAV_LINKS.map((link) => {
               const isActive = pathname === link.href ||
                 (link.href !== "/dashboard" && pathname.startsWith(link.href));
@@ -63,8 +63,8 @@ export function AppShell({ user, children }: AppShellProps) {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="sub-heading text-xs tracking-widest transition-colors hover:text-white"
-                  style={{ color: isActive ? "#00e5ff" : "#f0f2ff" }}
+                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors hover:text-white hover:bg-white/5"
+                  style={{ color: isActive ? "#00e5ff" : "#c5cae9" }}
                 >
                   {link.label}
                 </Link>
@@ -77,7 +77,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <form action="/api/auth/signout" method="POST">
               <button
                 type="submit"
-                className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest py-3"
+                className="text-sm font-medium px-4 py-2 rounded-lg text-[#c5cae9] hover:text-white hover:bg-white/5 transition-colors"
               >
                 Sign out
               </button>

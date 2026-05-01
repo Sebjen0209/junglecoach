@@ -17,7 +17,7 @@ export default async function HistoryPage() {
   const [{ data: rows }, { data: sub }, { count: usedCount }] = await Promise.all([
     supabase
       .from("post_game_analyses")
-      .select("match_id, jungler_champion, analysed_at, gank_count, objective_count, pathing_issue_count, created_at")
+      .select("match_id, jungler_champion, analysed_at, moments, created_at")
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .limit(50),
@@ -159,51 +159,57 @@ export default async function HistoryPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {analyses.map((a) => (
-              <Link
-                key={a.match_id}
-                href={`/dashboard/history/${encodeURIComponent(a.match_id)}`}
-                className="history-card flex items-center justify-between px-5 py-4 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center sub-heading text-[10px] font-bold border"
-                    style={{
-                      background: "rgba(0,229,255,0.06)",
-                      borderColor: "rgba(0,229,255,0.15)",
-                      color: "#00e5ff",
-                    }}
-                  >
-                    JG
+            {analyses.map((a) => {
+              const goodCount = (a.moments ?? []).filter((m) => m.was_good_decision).length;
+              const missedCount = (a.moments ?? []).filter((m) => !m.was_good_decision).length;
+              return (
+                <Link
+                  key={a.match_id}
+                  href={`/dashboard/history/${encodeURIComponent(a.match_id)}`}
+                  className="history-card flex items-center justify-between px-5 py-4 group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold border"
+                      style={{
+                        background: "rgba(0,229,255,0.06)",
+                        borderColor: "rgba(0,229,255,0.15)",
+                        color: "#00e5ff",
+                        fontFamily: "var(--font-barlow), system-ui, sans-serif",
+                      }}
+                    >
+                      JG
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "#f0f2ff" }}>
+                        {a.jungler_champion ?? "Unknown"}
+                      </p>
+                      <p className="text-xs font-mono mt-0.5" style={{ color: "#7986cb" }}>
+                        {a.match_id}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: "#f0f2ff" }}>
-                      {a.jungler_champion ?? "Unknown"}
-                    </p>
-                    <p className="text-xs font-mono mt-0.5" style={{ color: "#7986cb" }}>
-                      {a.match_id}
-                    </p>
+
+                  <div className="hidden sm:flex items-center gap-5 text-sm">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                      <span className="font-semibold" style={{ color: "#4ade80" }}>{goodCount}</span>
+                      <span style={{ color: "#7986cb" }}>good</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#E24B4A] inline-block" />
+                      <span className="font-semibold" style={{ color: "#E24B4A" }}>{missedCount}</span>
+                      <span style={{ color: "#7986cb" }}>missed</span>
+                    </span>
+                    <span className="text-xs" style={{ color: "#7986cb" }}>
+                      {new Date(a.analysed_at).toLocaleDateString("en-GB")}
+                    </span>
                   </div>
-                </div>
 
-                <div className="hidden sm:flex items-center gap-5 sub-heading text-[11px] tracking-widest">
-                  <span style={{ color: "#7986cb" }}>
-                    <span style={{ color: "#f0f2ff" }} className="font-bold">{a.gank_count}</span> GANKS
-                  </span>
-                  <span style={{ color: "#7986cb" }}>
-                    <span style={{ color: "#f0f2ff" }} className="font-bold">{a.objective_count}</span> OBJ
-                  </span>
-                  <span style={{ color: "#7986cb" }}>
-                    <span style={{ color: "#ff3366" }} className="font-bold">{a.pathing_issue_count}</span> ISSUES
-                  </span>
-                  <span style={{ color: "#7986cb" }}>
-                    {new Date(a.analysed_at).toLocaleDateString("en-GB")}
-                  </span>
-                </div>
-
-                <span className="history-arrow ml-4 transition-colors" style={{ color: "#7986cb" }}>→</span>
-              </Link>
-            ))}
+                  <span className="history-arrow ml-4 transition-colors" style={{ color: "#7986cb" }}>→</span>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

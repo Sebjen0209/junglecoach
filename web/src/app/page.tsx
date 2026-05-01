@@ -139,7 +139,7 @@ const STEPS = [
 ];
 
 const FEATURES = [
-  { title: "Real-time, not post-game", body: "Refreshes every 5 seconds. Priority shifts the moment the game state changes — not in a stat summary after you've already lost." },
+  { title: "Live analysis & post-game review", body: "Refreshes every 5 seconds during the game — priority shifts the moment the game state changes. Then dig into a full post-game breakdown to sharpen your decision-making for next time." },
   { title: "All 3 lanes, ranked", body: "AI weighs matchup win-rates, game phase, and gank difficulty to rank Top, Mid, and Bot every refresh." },
   { title: "Natural language reasoning", body: "\"Riven hard counters GP early. One gank ends the lane.\" Not just a colour — a reason you can act on." },
   { title: "Game phase awareness", body: "A Kassadin at minute 8 is not worth ganking for. The model knows which champions scale and adjusts priority accordingly." },
@@ -236,19 +236,19 @@ function Nav() {
         <span className="arcane-heading text-lg font-bold tracking-wider justify-self-start" style={{ color: "#f0c040", textShadow: "0 0 20px rgba(240,192,64,0.5)" }}>
           JungleCoach
         </span>
-        <div className="hidden md:flex items-center justify-center gap-8">
+        <div className="hidden md:flex items-center justify-center gap-1">
           {[["#how-it-works", "How it works"], ["#features", "Features"], ["#pricing", "Pricing"], ["#faq", "FAQ"]].map(([href, label]) => (
-            <a key={href} href={href} className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest">
+            <a key={href} href={href} className="text-sm font-medium px-4 py-2 rounded-lg text-[#c5cae9] hover:text-white hover:bg-white/5 transition-colors">
               {label}
             </a>
           ))}
         </div>
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-1">
           {loggedIn ? (
             <Link href="/dashboard" className="btn-arcane text-xs">Dashboard →</Link>
           ) : (
             <>
-              <Link href="/login" className="sub-heading text-xs text-[#c5cae9] hover:text-white transition-colors tracking-widest">Log in</Link>
+              <Link href="/login" className="text-sm font-medium px-4 py-2 rounded-lg text-[#c5cae9] hover:text-white hover:bg-white/5 transition-colors">Log in</Link>
               <Link href="/signup" className="btn-arcane text-xs">Get started</Link>
             </>
           )}

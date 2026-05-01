@@ -24,9 +24,7 @@ export interface AnalysisSummary {
   match_id: string;
   jungler_champion: string;
   analysed_at: string;
-  gank_count: number;
-  objective_count: number;
-  pathing_issue_count: number;
+  moments: CoachingMoment[];
   created_at: string;
 }
 
