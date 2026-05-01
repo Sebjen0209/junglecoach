@@ -59,7 +59,6 @@ export default async function HistoryDetailPage({ params }: PageProps) {
           <div className="flex gap-2">
             <Stat label="Ganks" value={analysis.gank_count} />
             <Stat label="Objectives" value={analysis.objective_count} />
-            <Stat label="Issues" value={analysis.pathing_issue_count} accent />
           </div>
         </div>
 
