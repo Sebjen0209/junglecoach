@@ -15,6 +15,12 @@ export function ManualAnalysisSection() {
         backdropFilter: "blur(16px)",
       }}
     >
+      <div
+        className="h-1.5 w-full"
+        style={{
+          background: "linear-gradient(135deg, rgba(0,60,120,0.8) 0%, rgba(60,10,100,0.7) 50%, rgba(0,229,255,0.15) 100%)",
+        }}
+      />
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/[0.02] transition-colors"

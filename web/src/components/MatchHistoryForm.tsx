@@ -20,7 +20,7 @@ export function MatchHistoryForm() {
 
     try {
       await requestAnalysis(matchId.trim(), summonerName.trim());
-      router.push(`/dashboard/history/${encodeURIComponent(matchId.trim())}`);
+      router.push(`/dashboard/post-analysis/${encodeURIComponent(matchId.trim())}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

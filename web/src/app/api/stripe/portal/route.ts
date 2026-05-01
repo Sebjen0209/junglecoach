@@ -39,14 +39,14 @@ export async function POST() {
     .maybeSingle();
 
   if (!sub?.stripe_customer_id) {
-    return NextResponse.redirect(`${SITE_URL}/billing?error=no_customer`, {
+    return NextResponse.redirect(`${SITE_URL}/account?error=no_customer`, {
       status: 303,
     });
   }
 
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: sub.stripe_customer_id,
-    return_url: `${SITE_URL}/billing`,
+    return_url: `${SITE_URL}/account`,
   });
 
   return NextResponse.redirect(portalSession.url, { status: 303 });

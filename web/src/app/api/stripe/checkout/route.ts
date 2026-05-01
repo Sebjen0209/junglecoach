@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
     customer: sub?.stripe_customer_id ?? undefined,
     customer_email: sub?.stripe_customer_id ? undefined : user.email,
     line_items: [{ price: plan.priceId, quantity: 1 }],
-    success_url: `${SITE_URL}/billing?success=1`,
-    cancel_url: `${SITE_URL}/billing?cancelled=1`,
+    success_url: `${SITE_URL}/account?success=1`,
+    cancel_url: `${SITE_URL}/account?cancelled=1`,
     metadata: { user_id: user.id, plan: planKey },
     subscription_data: {
       metadata: { user_id: user.id, plan: planKey },

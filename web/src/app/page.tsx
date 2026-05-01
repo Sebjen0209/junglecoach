@@ -158,7 +158,7 @@ const PLANS = [
     cta: "Get started", href: "/signup", highlight: false, accent: "cyan",
   },
   {
-    key: "premium_monthly", name: "Premium", price: "€7.99", period: "/ month", badge: "MOST POPULAR",
+    key: "premium_monthly", name: "Premium", price: "€7.99", period: "/ month", badge: null,
     features: [
       "Live overlay at full speed (5s refresh)",
       "Full reasoning with every suggestion",
