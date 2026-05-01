@@ -414,7 +414,7 @@ function MatchCard({
         <div className="flex-shrink-0 flex flex-col items-center gap-1.5 pr-1">
           {match.has_analysis ? (
             <a
-              href={`/dashboard/history/${encodeURIComponent(match.match_id)}`}
+              href={`/dashboard/post-analysis/${encodeURIComponent(match.match_id)}`}
               className="text-xs font-medium px-3 py-1.5 rounded-lg border whitespace-nowrap"
               style={{ background: "rgba(0,229,255,0.06)", borderColor: "rgba(0,229,255,0.2)", color: "#67e8f9" }}
             >
@@ -495,7 +495,7 @@ export function RecentMatchesLookup() {
     setError(null);
     try {
       await requestAnalysis(matchId, resolvedSummoner);
-      router.push(`/dashboard/history/${encodeURIComponent(matchId)}`);
+      router.push(`/dashboard/post-analysis/${encodeURIComponent(matchId)}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");

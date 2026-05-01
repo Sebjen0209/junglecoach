@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
   // If a plan was passed (from signup), redirect to billing to start checkout
   if (plan) {
-    return NextResponse.redirect(`${origin}/billing?upgrade=${plan}`);
+    return NextResponse.redirect(`${origin}/account?upgrade=${plan}`);
   }
 
   return NextResponse.redirect(`${origin}${next}`);

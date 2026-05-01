@@ -10,7 +10,7 @@ const PLAN_LIMITS: Record<string, { count: number; days: number }> = {
   pro:     { count: 35, days: 7 },
 };
 
-export default async function HistoryPage() {
+export default async function PostAnalysisPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -38,7 +38,6 @@ export default async function HistoryPage() {
     : "free";
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
 
-  // For non-free plans, recount with the correct rolling window
   let used = usedCount ?? 0;
   if (plan !== "free" && limits.days !== 30) {
     const { count } = await supabase
@@ -59,17 +58,31 @@ export default async function HistoryPage() {
   return (
     <div className="space-y-6">
       {/* Header + quota */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Match History</h1>
-          <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>
-            Post-game jungle coaching from your recent matches.
-          </p>
-        </div>
-
-        {/* Quota pill */}
+      <div
+        className="rounded-2xl border overflow-hidden"
+        style={{
+          background: "rgba(20,20,60,0.75)",
+          borderColor: "rgba(80,90,180,0.35)",
+          backdropFilter: "blur(16px)",
+        }}
+      >
         <div
-          className="rounded-xl px-4 py-3 border flex-shrink-0"
+          className="h-20 w-full"
+          style={{
+            background: "linear-gradient(135deg, rgba(0,60,120,0.8) 0%, rgba(60,10,100,0.7) 50%, rgba(0,229,255,0.15) 100%)",
+          }}
+        />
+        <div className="px-6 pb-6 pt-5 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="arcane-heading text-2xl font-bold" style={{ color: "#f0f2ff" }}>Post Analysis</h1>
+            <p className="text-sm mt-1" style={{ color: "#c5cae9" }}>
+              Post-game jungle coaching from your recent matches.
+            </p>
+          </div>
+
+          {/* Quota pill */}
+          <div
+            className="rounded-xl px-4 py-3 border flex-shrink-0"
           style={{
             background: "rgba(13,13,43,0.8)",
             borderColor: "rgba(80,90,180,0.3)",
@@ -104,31 +117,54 @@ export default async function HistoryPage() {
             </p>
           )}
         </div>
+        </div>
       </div>
 
       {/* Recent matches lookup */}
       <div
-        className="rounded-xl p-6 border"
+        className="rounded-xl border overflow-hidden"
         style={{
           background: "rgba(20,20,60,0.75)",
           borderColor: "rgba(80,90,180,0.35)",
           backdropFilter: "blur(16px)",
         }}
       >
-        <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-2" style={{ color: "#7986cb" }}>
-          RECENT RANKED MATCHES
-        </p>
-        <p className="text-sm mb-5" style={{ color: "#c5cae9" }}>
-          Enter your Riot ID to see your last 10 ranked games and analyse any of them.
-        </p>
-        <RecentMatchesLookup />
+        <div
+          className="h-1.5 w-full"
+          style={{
+            background: "linear-gradient(135deg, rgba(0,60,120,0.8) 0%, rgba(60,10,100,0.7) 50%, rgba(0,229,255,0.15) 100%)",
+          }}
+        />
+        <div className="p-6">
+          <p className="sub-heading text-[10px] font-bold tracking-[0.2em] mb-2" style={{ color: "#7986cb" }}>
+            RECENT RANKED MATCHES
+          </p>
+          <p className="text-sm mb-5" style={{ color: "#c5cae9" }}>
+            Enter your Riot ID to see your last 10 ranked games and analyse any of them.
+          </p>
+          <RecentMatchesLookup />
+        </div>
       </div>
 
-      {/* Manual match ID — collapsed by default */}
+      {/* Manual match ID */}
       <ManualAnalysisSection />
 
       {/* Past analyses */}
-      <div>
+      <div
+        className="rounded-xl border overflow-hidden"
+        style={{
+          background: "rgba(20,20,60,0.75)",
+          borderColor: "rgba(80,90,180,0.35)",
+          backdropFilter: "blur(16px)",
+        }}
+      >
+        <div
+          className="h-1.5 w-full"
+          style={{
+            background: "linear-gradient(135deg, rgba(0,60,120,0.8) 0%, rgba(60,10,100,0.7) 50%, rgba(0,229,255,0.15) 100%)",
+          }}
+        />
+        <div className="p-6">
         <div className="flex items-center gap-3 mb-4">
           <p className="sub-heading text-[11px] font-bold tracking-[0.15em]" style={{ color: "#c5cae9" }}>
             PAST ANALYSES
@@ -165,7 +201,7 @@ export default async function HistoryPage() {
               return (
                 <Link
                   key={a.match_id}
-                  href={`/dashboard/history/${encodeURIComponent(a.match_id)}`}
+                  href={`/dashboard/post-analysis/${encodeURIComponent(a.match_id)}`}
                   className="history-card flex items-center justify-between px-5 py-4 group"
                 >
                   <div className="flex items-center gap-4">
@@ -212,6 +248,7 @@ export default async function HistoryPage() {
             })}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
